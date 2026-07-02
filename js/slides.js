@@ -1,9 +1,10 @@
-import { SlideAddons } from './slides-addons.js';
-import './addons/matrix-parser.js';
-import './addons/youtube-parser.js';
-import './addons/image-parser.js';
-import './addons/static-timeline.js';
-import './addons/static-diagram.js';
+import { SlideAddons } from './slides-addons.js?v=2';
+import './addons/numpy-parser.js?v=2';
+import './addons/matrix-parser.js?v=2';
+import './addons/youtube-parser.js?v=2';
+import './addons/image-parser.js?v=2';
+import './addons/static-timeline.js?v=2';
+import './addons/static-diagram.js?v=2';
 
 // --- Global API for HTML onclick handlers ---
 window.toggleTheme = toggleTheme;
@@ -42,102 +43,173 @@ let slides = [];
 // Configuration
 const SLIDE_SEPARATOR = '\n---\n';
 
-// Configure marked to allow raw HTML inputs (Dangerous in public apps, safe for personal lectures)
-marked.setOptions({
-    gfm: true,
-    breaks: false,
-    pedantic: false,
-    sanitize: false, // DEPRECATED implicitly allowed. Allows raw inline HTML.
-    smartLists: true,
-    smartypants: true
-});
+// Deprecated: Marked options now initialized in loadDependencies() after the library is fetched.
+
+/**
+ * Inject Engine Boilerplate & Dependencies
+ */
+function injectEngineBoilerplate() {
+    // 1. Inject CSS
+    const ENGINE_CSS_URL = new URL('../css/slides.css', ENGINE_JS_DIR).href;
+    if (!document.querySelector(`link[href="${ENGINE_CSS_URL}"]`)) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = ENGINE_CSS_URL;
+        document.head.appendChild(link);
+    }
+
+    const hljsTheme = document.createElement('link');
+    hljsTheme.id = 'highlight-theme';
+    hljsTheme.rel = 'stylesheet';
+    hljsTheme.href = document.body.classList.contains('light-theme') ? 
+        'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css' :
+        'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css';
+    document.head.appendChild(hljsTheme);
+
+    // 2. Inject DOM Elements if missing
+    if (!document.getElementById('presentation-container')) {
+        document.body.innerHTML += `
+            <button id="theme-toggle" onclick="toggleTheme()" title="Toggle Day/Night Theme">🌙</button>
+            <div id="presentation-container"></div>
+            <div id="controls">
+                <button id="prev-btn" onclick="prevSlide()">&#10094; Prev</button>
+                <span id="slide-counter">1 / 1</span>
+                <button id="next-btn" onclick="nextSlide()">Next &#10095;</button>
+            </div>
+            <div id="demo-overlay" class="hidden">
+                <div id="demo-header">
+                    <span id="demo-title">Interactive Demo</span>
+                    <button id="close-demo-btn" onclick="hideDemo()">&#10006; Return to Slides</button>
+                </div>
+                <iframe id="demo-iframe" src=""></iframe>
+            </div>
+        `;
+    }
+}
+
+async function loadDependencies() {
+    const loadScript = (src) => new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) return resolve();
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+
+    await Promise.all([
+        loadScript("https://cdn.jsdelivr.net/npm/marked/marked.min.js"),
+        loadScript("https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js").then(() => 
+            loadScript("https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js")
+        )
+    ]);
+
+    if (!window.MathJax) {
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']], processEscapes: true },
+            svg: { fontCache: 'global' },
+            startup: { typeset: false } // We will trigger it manually
+        };
+        await loadScript("https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js");
+    }
+
+    marked.setOptions({
+        gfm: true, breaks: false, pedantic: false, sanitize: false, smartLists: true, smartypants: true
+    });
+}
 
 /**
  * Initialization on DOM Load
  */
 document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Get the target markdown file from the URL Query ?file=....
-    const urlParams = new URLSearchParams(window.location.search);
-    const fileUrl = urlParams.get('file');
-
-    if (!fileUrl) {
-        document.getElementById('presentation-container').innerHTML = `
-            <div class="slide active">
-                <h1>Error</h1>
-                <p>No lecture file specified. Please use <code>?file=lectures/01_example.md</code></p>
-                <div style="margin-top:20px;">
-                    <button class="demo-btn" onclick="window.location.href='?file=lectures/01_example.md'">Load Example Lecture</button>
-                </div>
-            </div>
-        `;
-        return;
-    }
-
     try {
-        // 2. Fetch the Markdown content and recursively resolve includes
-        const lastSlash = fileUrl.lastIndexOf('/');
-        const basePath = lastSlash !== -1 ? fileUrl.substring(0, lastSlash) : '';
-        const fileName = lastSlash !== -1 ? fileUrl.substring(lastSlash + 1) : fileUrl;
+        injectEngineBoilerplate();
+        await loadDependencies();
 
-        const markdown = await fetchAndResolveIncludes(basePath, fileName);
+        let rawMarkdown = '';
+        let basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+        
+        const template = document.getElementById('markdown-source');
+        const urlParams = new URLSearchParams(window.location.search);
+        const fileUrl = urlParams.get('file');
 
-        // 3. Parse and Inject Slides
-        parseAndInjectSlides(markdown);
+        if (template) {
+            // Source embedded directly in HTML <template>
+            rawMarkdown = template.innerHTML.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&");
+        } else if (fileUrl) {
+            // Source fetched from URL
+            const lastSlash = fileUrl.lastIndexOf('/');
+            basePath = lastSlash !== -1 ? fileUrl.substring(0, lastSlash) : '';
+            const fileName = lastSlash !== -1 ? fileUrl.substring(lastSlash + 1) : fileUrl;
+            
+            const response = await fetch(fileUrl);
+            if (!response.ok) throw new Error(`HTTP ${response.status} loading ${fileUrl}`);
+            rawMarkdown = await response.text();
+        } else {
+            throw new Error("No markdown source found. Ensure `<template id='markdown-source'>` exists or provide `?file=` URL parameter.");
+        }
 
-        // 4. Trigger MathJax to render all the newly injected LaTeX formulas
+        // Recursively resolve any !include() statements inside the Markdown
+        const finalMarkdown = await resolveIncludesInString(basePath, rawMarkdown);
+
+        parseAndInjectSlides(finalMarkdown);
+
         if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
             MathJax.typesetPromise().catch(err => console.error("MathJax error:", err));
         }
 
-        // 5. Setup Keyboard Navigation Listeners
         setupKeyboardNav();
 
     } catch (e) {
-        document.getElementById('presentation-container').innerHTML = `
-            <div class="slide active">
-                <h1 style="color: #e53935;">Failed to load lecture</h1>
-                <p>Could not load <code>${fileUrl}</code>.</p>
-                <pre>${e.message}</pre>
-            </div>
-        `;
+        const container = document.getElementById('presentation-container');
+        if (container) {
+            container.innerHTML = `
+                <div class="slide active">
+                    <h1 style="color: #e53935;">Failed to load lecture</h1>
+                    <pre>${e.message}</pre>
+                </div>
+            `;
+        } else {
+            console.error("Critical Engine Failure:", e);
+        }
     }
 });
 
 /**
- * Recursively fetches markdown files and resolves !include(filename.md) syntax.
+ * Recursively parses markdown string for !include(filename.md) and fetches them.
  */
-async function fetchAndResolveIncludes(basePath, fileUrl, visited = new Set()) {
-    const fullUrl = basePath ? `${basePath}/${fileUrl}` : fileUrl;
+async function resolveIncludesInString(basePath, markdownStr, visited = new Set()) {
+    const lines = markdownStr.split('\n');
+    const resolvedLines = [];
 
-    if (visited.has(fullUrl)) {
-        return `\n> **Error**: Circular inclusion detected for \`${fullUrl}\`\n`;
-    }
-    visited.add(fullUrl);
-
-    try {
-        const response = await fetch(fullUrl);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const content = await response.text();
-
-        const newBasePath = fullUrl.substring(0, fullUrl.lastIndexOf('/'));
-
-        const lines = content.split('\n');
-        const resolvedLines = [];
-
-        for (const line of lines) {
-            const includeMatch = line.match(/^\s*!include\((.+)\)\s*$/);
-            if (includeMatch) {
-                const includeFile = includeMatch[1].trim();
-                const includedContent = await fetchAndResolveIncludes(newBasePath, includeFile, visited);
-                resolvedLines.push(includedContent);
-            } else {
-                resolvedLines.push(line);
+    for (const line of lines) {
+        const includeMatch = line.match(/^\s*!include\((.+)\)\s*$/);
+        if (includeMatch) {
+            const includeFile = includeMatch[1].trim();
+            const fullUrl = basePath ? `${basePath}/${includeFile}` : includeFile;
+            
+            if (visited.has(fullUrl)) {
+                resolvedLines.push(`\n> **Error**: Circular inclusion detected for \`${fullUrl}\`\n`);
+                continue;
             }
+            visited.add(fullUrl);
+
+            try {
+                const response = await fetch(fullUrl);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const content = await response.text();
+                
+                const newBasePath = fullUrl.substring(0, fullUrl.lastIndexOf('/'));
+                const includedContent = await resolveIncludesInString(newBasePath, content, visited);
+                resolvedLines.push(includedContent);
+            } catch (e) {
+                resolvedLines.push(`\n> **Error** including \`${fullUrl}\`: ${e.message}\n`);
+            }
+        } else {
+            resolvedLines.push(line);
         }
-        return resolvedLines.join('\n');
-    } catch (e) {
-        return `\n> **Error** including \`${fullUrl}\`: ${e.message}\n`;
     }
+    return resolvedLines.join('\n');
 }
 
 /**
@@ -179,6 +251,13 @@ function parseAndInjectSlides(markdownContent) {
     updateCounter();
 
     SlideAddons.renderAll();
+
+    // Trigger Highlight.js on all newly created code blocks
+    if (window.hljs) {
+        document.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+    }
 }
 
 /**
@@ -288,6 +367,14 @@ function toggleTheme() {
     const btn = document.getElementById('theme-toggle');
     if (btn) btn.textContent = isLight ? '☀️' : '🌙';
 
+    // Update Highlight.js theme
+    const hljsTheme = document.getElementById('highlight-theme');
+    if (hljsTheme) {
+        hljsTheme.href = isLight ?
+            'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css' :
+            'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css';
+    }
+
     // Broadcast to static timelines on the same page
     window.dispatchEvent(new CustomEvent('theme-change', { detail: { theme } }));
 
@@ -310,10 +397,17 @@ function toggleTheme() {
         document.body.classList.remove('light-theme');
     }
 
-    // We must wait for DOM to be ready to find the button
+    // We must wait for DOM to be ready to find the button and stylesheet
     document.addEventListener('DOMContentLoaded', () => {
         const btn = document.getElementById('theme-toggle');
         if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+
+        const hljsTheme = document.getElementById('highlight-theme');
+        if (hljsTheme) {
+            hljsTheme.href = isLight ?
+                'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css' :
+                'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css';
+        }
     });
 })();
 

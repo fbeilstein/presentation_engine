@@ -1,4 +1,4 @@
-import { SlideAddons } from '../slides-addons.js';
+import { SlideAddons } from '../slides-addons.js?v=2';
 
 /**
  * Static Diagram Addon

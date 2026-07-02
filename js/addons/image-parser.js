@@ -1,4 +1,4 @@
-import { SlideAddons } from '../slides-addons.js';
+import { SlideAddons } from '../slides-addons.js?v=2';
 
 export function parseImages(markdown) {
     // UPDATED REGEX: The {config} block at the end is now optional (?:...)?

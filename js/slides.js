@@ -134,8 +134,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         const fileUrl = urlParams.get('file');
 
         if (template) {
-            // Source embedded directly in HTML <template>
-            rawMarkdown = template.innerHTML.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&");
+            // Source embedded directly in HTML <template> or <script>
+            rawMarkdown = template.tagName.toLowerCase() === 'script' ? template.textContent : template.innerHTML.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&");
+            
+            // Auto-dedent to fix IDE auto-formatting adding tabs/spaces
+            const lines = rawMarkdown.split('\n');
+            let minIndent = Infinity;
+            for (const line of lines) {
+                if (line.trim().length > 0) {
+                    const indent = line.match(/^\s*/)[0].length;
+                    if (indent < minIndent) minIndent = indent;
+                }
+            }
+            if (minIndent > 0 && minIndent !== Infinity) {
+                rawMarkdown = lines.map(line => line.length >= minIndent ? line.substring(minIndent) : line).join('\n');
+            }
         } else if (fileUrl) {
             // Source fetched from URL
             const lastSlash = fileUrl.lastIndexOf('/');

@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             basePath = lastSlash !== -1 ? fileUrl.substring(0, lastSlash) : '';
             const fileName = lastSlash !== -1 ? fileUrl.substring(lastSlash + 1) : fileUrl;
             
-            const response = await fetch(fileUrl);
+            const response = await fetch(fileUrl, { cache: 'no-cache' });
             if (!response.ok) throw new Error(`HTTP ${response.status} loading ${fileUrl}`);
             rawMarkdown = await response.text();
         } else {
@@ -208,7 +208,7 @@ async function resolveIncludesInString(basePath, markdownStr, visited = new Set(
             visited.add(fullUrl);
 
             try {
-                const response = await fetch(fullUrl);
+                const response = await fetch(fullUrl, { cache: 'no-cache' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const content = await response.text();
                 

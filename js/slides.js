@@ -51,7 +51,7 @@ const SLIDE_SEPARATOR = '\n---\n';
  */
 function injectEngineBoilerplate() {
     // 1. Inject CSS
-    const ENGINE_CSS_URL = new URL('../css/slides.css?v=5', ENGINE_JS_DIR).href;
+    const ENGINE_CSS_URL = new URL('../css/slides.css?v=6', ENGINE_JS_DIR).href;
     if (!document.querySelector(`link[href="${ENGINE_CSS_URL}"]`)) {
         const link = document.createElement('link');
         link.rel = 'stylesheet';
@@ -261,9 +261,9 @@ function parseAndInjectSlides(markdownContent) {
         });
     });
 
-    // Update global reference array
     slides = document.querySelectorAll('.slide');
     updateCounter();
+    updateSlideScale();
 
     SlideAddons.renderAll();
 
@@ -447,4 +447,26 @@ window.addEventListener('message', (event) => {
  */
 function toggleExpand() {
     slides.forEach(slide => slide.classList.toggle('expanded'));
+    updateSlideScale();
 }
+
+/**
+ * Responsive Scaling (Fixed Layout Resolution)
+ */
+function updateSlideScale() {
+    if (!slides || !slides.length) return;
+    const isExpanded = slides[0].classList.contains('expanded');
+    
+    // Fixed base resolution
+    const baseWidth = 1600;
+    const baseHeight = 900;
+    
+    // Normal mode fits within 90% width / 85% height
+    // Expanded mode fills 100% of the window
+    const targetWidth = isExpanded ? window.innerWidth : window.innerWidth * 0.9;
+    const targetHeight = isExpanded ? window.innerHeight : window.innerHeight * 0.85;
+    
+    const scale = Math.min(targetWidth / baseWidth, targetHeight / baseHeight);
+    document.documentElement.style.setProperty('--slide-scale', scale);
+}
+window.addEventListener('resize', updateSlideScale);

@@ -12,6 +12,7 @@ window.nextSlide = nextSlide;
 window.prevSlide = prevSlide;
 window.showDemo = showDemo;
 window.hideDemo = hideDemo;
+window.toggleExpand = toggleExpand;
 
 // --- Auto-detect engine paths via import.meta.url ---
 // This makes the engine mount-path-agnostic: works at engine/, lib/engine/, or repo root.
@@ -50,7 +51,7 @@ const SLIDE_SEPARATOR = '\n---\n';
  */
 function injectEngineBoilerplate() {
     // 1. Inject CSS
-    const ENGINE_CSS_URL = new URL('../css/slides.css', ENGINE_JS_DIR).href;
+    const ENGINE_CSS_URL = new URL('../css/slides.css?v=5', ENGINE_JS_DIR).href;
     if (!document.querySelector(`link[href="${ENGINE_CSS_URL}"]`)) {
         const link = document.createElement('link');
         link.rel = 'stylesheet';
@@ -70,6 +71,7 @@ function injectEngineBoilerplate() {
     if (!document.getElementById('presentation-container')) {
         document.body.innerHTML += `
             <button id="theme-toggle" onclick="toggleTheme()" title="Toggle Day/Night Theme">🌙</button>
+            <button id="expand-toggle" onclick="toggleExpand()" title="Expand Slide" style="position: fixed; top: 20px; right: 74px; width: 44px; height: 44px; background-color: var(--control-bg); color: var(--text-color); border: 1px solid var(--table-border); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; z-index: 900; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); transition: all 0.3s;">⛶</button>
             <div id="presentation-container"></div>
             <div id="controls">
                 <button id="prev-btn" onclick="prevSlide()">&#10094; Prev</button>
@@ -439,3 +441,10 @@ window.addEventListener('message', (event) => {
         event.source.postMessage({ type: 'theme-change', theme: isLight ? 'light' : 'dark' }, '*');
     }
 });
+
+/**
+ * Expand/Fullscreen slide toggle
+ */
+function toggleExpand() {
+    slides.forEach(slide => slide.classList.toggle('expanded'));
+}

@@ -90,7 +90,6 @@ export function parseMatrices(markdown) {
             const attrStr = cellMatch[3] || "";
             const content = cellMatch[4].trim();
 
-            // --- THESE ARE THE LINES I ACCIDENTALLY DELETED! ---
             // Extract classes and inline styles from the {} block
             const classMatches = attrStr.match(/\.[\w-]+/g) || [];
             const classes = classMatches.map(c => c.substring(1)).join(' ');

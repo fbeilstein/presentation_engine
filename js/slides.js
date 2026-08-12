@@ -352,10 +352,10 @@ function showDemo(demoName) {
 
     // If demoName is an HTML file, load it directly (relative to the page).
     // Otherwise (if it's a JSON path or short name), route it through the sandbox engine.
-    if (demoName.endsWith('.html')) {
-        iframe.src = demoName;
-    } else {
+    if (demoName.endsWith('.json')) {
         iframe.src = `${SANDBOX_URL}?code=${DEMO_PREFIX}${demoName}`;
+    } else {
+        iframe.src = demoName;
     }
 
     title.textContent = `Interactive Demo: ${demoName.split('/').pop()}`;

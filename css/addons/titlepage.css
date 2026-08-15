@@ -1,0 +1,73 @@
+.titlepage-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 60px 100px;
+    box-sizing: border-box;
+}
+
+.titlepage-bg > * {
+    pointer-events: auto; /* Re-enable clicking for links in the background */
+}
+
+.titlepage-bg .tp-top {
+    text-align: center;
+    font-size: 1.8rem;
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.titlepage-bg .tp-center-group {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.titlepage-bg .tp-title {
+    text-align: center;
+    font-size: 5rem;
+    font-weight: bold;
+    font-family: var(--font-heading, inherit);
+    margin-bottom: 20px;
+    line-height: 1.1;
+}
+
+.titlepage-bg .tp-subcaption {
+    text-align: center;
+    font-size: 2.2rem;
+    opacity: 0.9;
+}
+
+.titlepage-bg .tp-middle {
+    flex: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    width: 100%;
+}
+
+.titlepage-bg .tp-left, 
+.titlepage-bg .tp-right {
+    width: 35%;
+    font-size: 1.8rem;
+    line-height: 1.4;
+}
+
+.titlepage-bg .tp-bottom {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    text-align: center;
+    font-size: 1.8rem;
+}

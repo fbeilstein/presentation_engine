@@ -88,13 +88,14 @@ export const SlideAddons = {
                 }
                 
                 const body = bodyLines.join('\n');
-                const parsedConfig = this.parseConfigBlock(configStr);
-                let result = this.blockPlugins[pluginName](parsedConfig, body);
                 
-                // Recursively process any nested blocks that were rendered into the result
-                if (result.match(/(?:^|\n):::/)) {
-                    result = this._processBlocks(result);
-                }
+                // Recursively process nested blocks inside the body BEFORE passing to the plugin.
+                // This ensures inner structures (like matrix cells) are evaluated and 
+                // transformed into HTML, hiding their syntax from the outer plugin's regex.
+                const processedBody = this._processBlocks(body);
+                
+                const parsedConfig = this.parseConfigBlock(configStr);
+                const result = this.blockPlugins[pluginName](parsedConfig, processedBody);
                 
                 outputLines.push(result);
             } else {

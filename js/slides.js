@@ -7,6 +7,7 @@ import './addons/image-parser.js?v=2';
 import './addons/static-timeline.js?v=2';
 import './addons/static-diagram.js?v=2';
 import './addons/titlepage-parser.js?v=1';
+import './addons/geometry-parser.js?v=1';
 
 // --- Global API for HTML onclick handlers ---
 window.toggleTheme = toggleTheme;

@@ -1,53 +1,35 @@
 import { SlideAddons } from '../slides-addons.js?v=2';
 
-export function parseImages(markdown) {
-    // UPDATED REGEX: The {config} block at the end is now optional (?:...)?
-    const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)(?:\s*\{([^}]+)\})?/g;
-
-    return markdown.replace(imgRegex, (match, alt, src, configStr) => {
-        // Skip youtube blocks since they have their own parser
-        if (alt === 'youtube') return match;
-
-        const config = {};
-        
-        // Only parse parameters if the {config} block actually exists
-        if (configStr) {
-            const configMatches = configStr.matchAll(/([a-zA-Z0-9_-]+)(?:=(?:"([^"]+)"|([^\s}]+)))?/g);
-            for (const m of configMatches) {
-                config[m[1]] = m[2] !== undefined ? m[2] : (m[3] !== undefined ? m[3] : true);
-            }
-        }
-
-        const parseDim = (val) => {
-            if (!val || val === true) return '';
-            return !isNaN(val) ? val + '%' : val;
-        };
-
-        let style = '';
-        if (config.left || config.top || config.pos || config.absolute) {
-            style += 'position: absolute; ';
-            if (config.left && config.left !== true) style += `left: ${parseDim(config.left)}; `;
-            if (config.top && config.top !== true) style += `top: ${parseDim(config.top)}; `;
-            if (config.width && config.width !== true) style += `width: ${parseDim(config.width)}; `;
-            if (config.height && config.height !== true) style += `height: ${parseDim(config.height)}; `;
-        } else {
-            if (config.width && config.width !== true) style += `width: ${parseDim(config.width)}; `;
-            if (config.height && config.height !== true) style += `height: ${parseDim(config.height)}; `;
-
-            if (config.center) {
-                style += 'display: block; margin-left: auto; margin-right: auto; ';
-            } else if (config.right) {
-                style += 'display: block; margin-left: auto; margin-right: 0; ';
-            }
-        }
-
-        if (config.aspect) style += `aspect-ratio: ${config.aspect}; `;
-
-        // Add object-fit natively so manually styled images look crisp
-        style += 'object-fit: contain;';
-
-        return `<img src="${src}" alt="${alt}" style="${style.trim()}">`;
-    });
+function parseDim(val) {
+    if (!val || val === true) return '';
+    return !isNaN(val) ? val + '%' : val;
 }
 
-SlideAddons.registerPreProcessor(parseImages);
+SlideAddons.registerInlinePlugin('image', (args, config, altText) => {
+    let style = '';
+    if (config.kv.left || config.kv.top || config.kv.absolute || config.kv.pos) {
+        style += 'position: absolute; ';
+        if (config.kv.left && config.kv.left !== true) style += `left: ${parseDim(config.kv.left)}; `;
+        if (config.kv.top && config.kv.top !== true) style += `top: ${parseDim(config.kv.top)}; `;
+        if (config.kv.width && config.kv.width !== true) style += `width: ${parseDim(config.kv.width)}; `;
+        if (config.kv.height && config.kv.height !== true) style += `height: ${parseDim(config.kv.height)}; `;
+    } else {
+        if (config.kv.width && config.kv.width !== true) style += `width: ${parseDim(config.kv.width)}; `;
+        if (config.kv.height && config.kv.height !== true) style += `height: ${parseDim(config.kv.height)}; `;
+
+        if (config.kv.center) {
+            style += 'display: block; margin-left: auto; margin-right: auto; ';
+        } else if (config.kv.right) {
+            style += 'display: block; margin-left: auto; margin-right: 0; ';
+        }
+    }
+
+    if (config.kv.aspect) style += `aspect-ratio: ${config.kv.aspect}; `;
+    style += 'object-fit: contain; ';
+
+    if (config.css) style += config.css;
+
+    const classAttr = config.classes.length > 0 ? ` class="${config.classes.join(' ')}"` : '';
+
+    return `<img src="${args}" alt="${altText}"${classAttr} style="${style.trim()}">`;
+});

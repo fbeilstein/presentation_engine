@@ -10,44 +10,30 @@ if (!document.querySelector(`link[href="${CSS_URL}"]`)) {
     document.head.appendChild(link);
 }
 
-/**
- * Parses parameters like { color="red" background="url(...)" }
- */
-function parseOptions(attrStr) {
-    const options = {};
-    const regex = /([a-zA-Z0-9_-]+)="([^"]*)"/g;
-    let match;
-    while ((match = regex.exec(attrStr)) !== null) {
-        options[match[1]] = match[2];
+SlideAddons.registerBlockPlugin('titlepage', (config, body) => {
+    let styleStr = "";
+    for (const [key, value] of Object.entries(config.kv)) {
+        // Support passing arbitrary CSS properties directly (e.g. background="blue" color="white")
+        styleStr += `${key}: ${value}; `;
     }
-    return options;
-}
+    if (config.css) {
+        styleStr += ` ${config.css}`;
+    }
 
-SlideAddons.registerPreProcessor((markdown) => {
-    // Match :::titlepage { options } ... :::
-    const titlepageRegex = /^:::titlepage\s*(?:\{(.*?)\})?\s*\n([\s\S]*?)\n:::/gm;
+    const classAttr = config.classes.length > 0 ? ` titlepage-bg ${config.classes.join(' ')}` : ` titlepage-bg`;
+
+    // Parse named slots like [[top]], [[title]], etc.
+    const slots = {};
+    const slotRegex = /^\[\[([a-z]+)\]\]\s*\n([\s\S]*?)(?=\n\[\[|$)/gm;
+    let slotMatch;
+    while ((slotMatch = slotRegex.exec(body)) !== null) {
+        slots[slotMatch[1]] = slotMatch[2].trim();
+    }
     
-    return markdown.replace(titlepageRegex, (match, attrStr, body) => {
-        const options = parseOptions(attrStr || "");
-        
-        let styleStr = "";
-        for (const [key, value] of Object.entries(options)) {
-            // Support passing arbitrary CSS properties directly (e.g. background="blue" color="white")
-            styleStr += `${key}: ${value}; `;
-        }
-        
-        // Parse named slots like [[top]], [[title]], etc.
-        const slots = {};
-        const slotRegex = /^\[\[([a-z]+)\]\]\s*\n([\s\S]*?)(?=\n\[\[|$)/gm;
-        let slotMatch;
-        while ((slotMatch = slotRegex.exec(body)) !== null) {
-            slots[slotMatch[1]] = slotMatch[2].trim();
-        }
-        
-        // Generate the responsive background HTML template.
-        // We inject empty lines (\n\n) around the content so that marked.js 
-        // processes markdown (like bolding, lists, math) inside the HTML divs.
-        return `<div class="titlepage-bg" style="${styleStr}">
+    // Generate the responsive background HTML template.
+    // We inject empty lines (\n\n) around the content so that marked.js 
+    // processes markdown (like bolding, lists, math) inside the HTML divs.
+    return `<div class="${classAttr.trim()}" style="${styleStr.trim()}">
 <div class="tp-top">
 
 ${slots['top'] || ''}
@@ -83,5 +69,4 @@ ${slots['bottom'] || ''}
 
 </div>
 </div>`;
-    });
 });

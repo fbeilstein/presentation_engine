@@ -1,87 +1,60 @@
 import { SlideAddons } from '../slides-addons.js?v=2';
 
-export function parseYoutube(markdown) {
-    const ytRegex = /!\[youtube\]\(([^)]+)\)(?:\s*\{([^}]*)\})?/g;
-
-    return markdown.replace(ytRegex, (match, src, configStr) => {
-        const config = {};
-        if (configStr) {
-            for (const m of configStr.matchAll(/(\w+)="([^"]+)"/g)) {
-                config[m[1]] = m[2];
-            }
-        }
-
-        const parseDim = (val) => {
-            if (!val) return '';
-            return !isNaN(val) ? val + '%' : val;
-        };
-
-        let style = 'border: none; aspect-ratio: 16 / 9;';
-
-        if (config.left || config.top || config.absolute || config.pos) {
-            style += ' position: absolute;';
-            if (config.left) style += ` left: ${parseDim(config.left)};`;
-            if (config.top) style += ` top: ${parseDim(config.top)};`;
-            if (config.width) style += ` width: ${parseDim(config.width)};`;
-            if (config.height) style += ` height: ${parseDim(config.height)};`;
-        } else {
-            style += ` width: ${parseDim(config.width) || '100%'};`;
-            if (config.height) style += ` height: ${parseDim(config.height)};`;
-        }
-
-        if (config.aspect) style += ` aspect-ratio: ${config.aspect};`;
-
-        const url = src.includes('youtube.com') ? src : `https://www.youtube.com/embed/${src}`;
-
-        return `<iframe style="${style}" src="${url}" title="YouTube video player" allowfullscreen></iframe>`;
-    });
+function parseDim(val) {
+    if (!val || val === true) return '';
+    return !isNaN(val) ? val + '%' : val;
 }
 
-export function parseGDrive(markdown) {
-    // Looks for ![gdrive](url) {config}
-    const driveRegex = /!\[gdrive\]\(([^)]+)\)(?:\s*\{([^}]*)\})?/g;
+SlideAddons.registerInlinePlugin('youtube', (args, config) => {
+    let style = 'border: none; aspect-ratio: 16 / 9;';
 
-    return markdown.replace(driveRegex, (match, src, configStr) => {
-        const config = {};
-        if (configStr) {
-            // Same flexible regex as image-parser: supports quoted and unquoted values
-            for (const m of configStr.matchAll(/([a-zA-Z0-9_-]+)(?:=(?:"([^"]+)"|([^\s}]+)))?/g)) {
-                config[m[1]] = m[2] !== undefined ? m[2] : (m[3] !== undefined ? m[3] : true);
-            }
-        }
+    if (config.kv.left || config.kv.top || config.kv.absolute || config.kv.pos) {
+        style += ' position: absolute;';
+        if (config.kv.left) style += ` left: ${parseDim(config.kv.left)};`;
+        if (config.kv.top) style += ` top: ${parseDim(config.kv.top)};`;
+        if (config.kv.width) style += ` width: ${parseDim(config.kv.width)};`;
+        if (config.kv.height) style += ` height: ${parseDim(config.kv.height)};`;
+    } else {
+        style += ` width: ${parseDim(config.kv.width) || '100%'};`;
+        if (config.kv.height) style += ` height: ${parseDim(config.kv.height)};`;
+    }
 
-        const parseDim = (val) => {
-            if (!val || val === true) return '';
-            return !isNaN(val) ? val + '%' : val;
-        };
+    if (config.kv.aspect) style += ` aspect-ratio: ${config.kv.aspect};`;
+    
+    // Inject the pure CSS leftover from `{}` block parsing
+    if (config.css) style += ` ${config.css}`;
 
-        // Only apply aspect-ratio as fallback when no explicit height is given
-        let style = 'border: none;';
-        if (!config.height) style += ' aspect-ratio: 16 / 9;';
+    const url = args.includes('youtube.com') ? args : `https://www.youtube.com/embed/${args}`;
 
-        if (config.left || config.top || config.absolute || config.pos) {
-            style += ' position: absolute;';
-            if (config.left && config.left !== true) style += ` left: ${parseDim(config.left)};`;
-            if (config.top && config.top !== true) style += ` top: ${parseDim(config.top)};`;
-            if (config.width && config.width !== true) style += ` width: ${parseDim(config.width)};`;
-            if (config.height && config.height !== true) style += ` height: ${parseDim(config.height)};`;
-        } else {
-            style += ` width: ${parseDim(config.width) || '100%'};`;
-            if (config.height && config.height !== true) style += ` height: ${parseDim(config.height)};`;
-        }
+    const classAttr = config.classes.length > 0 ? ` class="${config.classes.join(' ')}"` : '';
 
-        if (config.aspect) style += ` aspect-ratio: ${config.aspect};`;
+    return `<iframe${classAttr} style="${style.trim()}" src="${url}" title="YouTube video player" allowfullscreen></iframe>`;
+});
 
-        // Extract the unique File ID from the Google Drive link
-        const idMatch = src.match(/\/d\/([a-zA-Z0-9_-]+)/);
+SlideAddons.registerInlinePlugin('gdrive', (args, config) => {
+    let style = 'border: none;';
+    if (!config.kv.height) style += ' aspect-ratio: 16 / 9;';
 
-        // If the regex finds an ID, use it. If not, assume the user just pasted the raw ID into the markdown.
-        const fileId = idMatch ? idMatch[1] : src;
-        const url = `https://drive.google.com/file/d/${fileId}/preview`;
+    if (config.kv.left || config.kv.top || config.kv.absolute || config.kv.pos) {
+        style += ' position: absolute;';
+        if (config.kv.left && config.kv.left !== true) style += ` left: ${parseDim(config.kv.left)};`;
+        if (config.kv.top && config.kv.top !== true) style += ` top: ${parseDim(config.kv.top)};`;
+        if (config.kv.width && config.kv.width !== true) style += ` width: ${parseDim(config.kv.width)};`;
+        if (config.kv.height && config.kv.height !== true) style += ` height: ${parseDim(config.kv.height)};`;
+    } else {
+        style += ` width: ${parseDim(config.kv.width) || '100%'};`;
+        if (config.kv.height && config.kv.height !== true) style += ` height: ${parseDim(config.kv.height)};`;
+    }
 
-        return `<iframe style="${style}" src="${url}" allow="autoplay" allowfullscreen></iframe>`;
-    });
-}
+    if (config.kv.aspect) style += ` aspect-ratio: ${config.kv.aspect};`;
 
-SlideAddons.registerPreProcessor(parseYoutube);
-SlideAddons.registerPreProcessor(parseGDrive);
+    if (config.css) style += ` ${config.css}`;
+
+    const idMatch = args.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    const fileId = idMatch ? idMatch[1] : args;
+    const url = `https://drive.google.com/file/d/${fileId}/preview`;
+
+    const classAttr = config.classes.length > 0 ? ` class="${config.classes.join(' ')}"` : '';
+
+    return `<iframe${classAttr} style="${style.trim()}" src="${url}" allow="autoplay" allowfullscreen></iframe>`;
+});

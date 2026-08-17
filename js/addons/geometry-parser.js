@@ -127,6 +127,11 @@ SlideAddons.registerInlinePlugin('text', (args, config) => {
     if (config.kv.color) style += ` color: ${config.kv.color};`;
     if (config.kv.size) style += ` font-size: ${config.kv.size};`;
     if (config.kv.align) style += ` text-align: ${config.kv.align};`;
+    if (config.kv.width) style += ` width: ${config.kv.width};`;
+    if (config.kv.background || config.kv.bg) style += ` background: ${config.kv.background || config.kv.bg};`;
+    if (config.kv.padding) style += ` padding: ${config.kv.padding};`;
+    if (config.kv.border) style += ` border: ${config.kv.border};`;
+    if (config.kv.radius) style += ` border-radius: ${config.kv.radius};`;
     
     if (config.css) {
         style += ` ${config.css}`;

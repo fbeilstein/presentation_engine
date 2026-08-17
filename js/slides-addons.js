@@ -89,7 +89,13 @@ export const SlideAddons = {
                 
                 const body = bodyLines.join('\n');
                 const parsedConfig = this.parseConfigBlock(configStr);
-                const result = this.blockPlugins[pluginName](parsedConfig, body);
+                let result = this.blockPlugins[pluginName](parsedConfig, body);
+                
+                // Recursively process any nested blocks that were rendered into the result
+                if (result.match(/(?:^|\n):::/)) {
+                    result = this._processBlocks(result);
+                }
+                
                 outputLines.push(result);
             } else {
                 outputLines.push(line);

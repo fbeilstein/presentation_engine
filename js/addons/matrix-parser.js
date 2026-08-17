@@ -76,6 +76,7 @@ SlideAddons.registerBlockPlugin('matrix', (config, body) => {
         let inCodeBlock = false;
         let inMathBlock = false;
         let containerDepth = 0;
+        let htmlDepth = 0;
 
         for (let j = 0; j < cellLines.length; j++) {
             const l = cellLines[j];
@@ -85,8 +86,18 @@ SlideAddons.registerBlockPlugin('matrix', (config, body) => {
             if (trimmed.startsWith('$$')) inMathBlock = !inMathBlock;
             if (trimmed.match(/^:::[a-zA-Z]+/)) containerDepth++;
             else if (trimmed === ':::') containerDepth = Math.max(0, containerDepth - 1);
+            
+            const divOpens = (l.match(/<div\b/g) || []).length;
+            const divCloses = (l.match(/<\/div>/g) || []).length;
+            const svgOpens = (l.match(/<svg\b/g) || []).length;
+            const svgCloses = (l.match(/<\/svg>/g) || []).length;
+            
+            // Adjust depth based on tags found
+            htmlDepth += (divOpens + svgOpens) - (divCloses + svgCloses);
+            if (htmlDepth < 0) htmlDepth = 0;
 
-            const isProtected = inCodeBlock || inMathBlock || containerDepth > 0;
+            // If we are currently inside any block, protect the empty lines
+            const isProtected = inCodeBlock || inMathBlock || containerDepth > 0 || htmlDepth > 0 || (divOpens + svgOpens > 0);
 
             if (!isProtected && trimmed === '') {
                 if (currentBlock.length > 0) {

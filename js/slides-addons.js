@@ -128,11 +128,6 @@ export const SlideAddons = {
     preProcess(markdown) {
         let md = markdown;
         
-        // Backwards compatibility for legacy code block addons
-        md = md.replace(/^```(static-diagram|static-timeline)(?:\{([^}]*)\})?\s*\n([\s\S]*?)\n```/gm, 
-            (match, plugin, config, body) => `:::${plugin}${config ? ` {${config}}` : ''}\n${body}\n:::`
-        );
-
         md = this._processBlocks(md);
         md = this._processInlines(md);
         this.preProcessors.forEach(fn => {

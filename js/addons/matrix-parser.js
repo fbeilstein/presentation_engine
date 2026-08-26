@@ -1,4 +1,4 @@
-import { SlideAddons } from '../slides-addons.js?v=2';
+import { SlideAddons } from '../slides-addons.js?v=3';
 
 SlideAddons.registerBlockPlugin('matrix', (config, body) => {
     const isDebug = config.kv.debug;

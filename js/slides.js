@@ -1,8 +1,8 @@
-import { SlideAddons } from './slides-addons.js?v=2';
+import { SlideAddons } from './slides-addons.js?v=3';
 import './addons/numpy-parser.js?v=2';
 import './addons/matrix-parser.js?v=3';
 import './addons/youtube-parser.js?v=2';
-import './addons/3dmol-parser.js?v=9';
+import './addons/3dmol-parser.js?v=10';
 import './addons/image-parser.js?v=2';
 import './addons/static-timeline.js?v=2';
 import './addons/static-diagram.js?v=2';

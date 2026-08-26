@@ -1,4 +1,4 @@
-import { SlideAddons } from '../slides-addons.js?v=2';
+import { SlideAddons } from '../slides-addons.js?v=3';
 import { Timeline } from '../sandbox/timeline.js';
 
 /**

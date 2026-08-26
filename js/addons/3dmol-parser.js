@@ -1,4 +1,4 @@
-import { SlideAddons } from '../slides-addons.js?v=2';
+import { SlideAddons } from '../slides-addons.js?v=3';
 
 // -----------------------------------------------------------------------------
 // 1. Core Loader & Global Initializer
@@ -73,7 +73,7 @@ window.__init3Dmol = function(containerId, cfg) {
                     if (!p.resi || p.resi.length === 0) return;
                     const pocketSel = { resi: p.resi };
                     viewer.setStyle(pocketSel, { stick: {} });
-                    viewer.addSurface(window['3Dmol'].SurfaceType.VDW, {
+                    viewer.addSurface(1, { // 1 is $3Dmol.SurfaceType.VDW
                         opacity: p.opacity,
                         color: p.color
                     }, pocketSel);

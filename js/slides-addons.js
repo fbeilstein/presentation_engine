@@ -26,10 +26,6 @@ export const SlideAddons = {
         if (!configStr) return { classes: [], kv: {}, css: '' };
         let str = configStr.trim();
 
-        const classMatches = str.match(/\.[\w-]+/g) || [];
-        const classes = classMatches.map(c => c.substring(1));
-        str = str.replace(/\.[\w-]+/g, '');
-
         const kv = {};
         str = str.replace(/([a-zA-Z0-9_-]+)=(?:"([^"]+)"|([^\s}]+))/g, (match, key, qVal, uVal) => {
             kv[key] = qVal !== undefined ? qVal : uVal;
@@ -44,6 +40,10 @@ export const SlideAddons = {
                 return space;
             });
         });
+
+        const classMatches = str.match(/\.[\w-]+/g) || [];
+        const classes = classMatches.map(c => c.substring(1));
+        str = str.replace(/\.[\w-]+/g, '');
 
         const css = str.trim();
         return { classes, kv, css };

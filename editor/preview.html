@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Slide Preview</title>
+</head>
+<body>
+    <div id="loading" style="padding: 20px; font-family: sans-serif; color: #666;">
+        Select an entry point to preview...
+    </div>
+
+    <script>
+        window.isEditorPreview = true;
+
+        async function loadContext() {
+            const params = new URLSearchParams(window.location.search);
+            const contextUrl = params.get('context');
+            if (!contextUrl) return;
+
+            document.getElementById('loading').textContent = `Loading ${contextUrl}...`;
+
+            try {
+                // Fetch the actual lecture HTML (bypass cache to see live updates)
+                const res = await fetch(contextUrl, { cache: "no-store" });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                let html = await res.text();
+
+                // Inject our bridge script right before </head> or <body>
+                const cacheBuster = new Date().getTime();
+                const bridgeScript = `<script src="/engine/editor/preview-inject/bridge.js?v=${cacheBuster}"><\/script>\n`;
+                if (html.includes('</head>')) {
+                    html = html.replace('</head>', bridgeScript + '</head>');
+                } else {
+                    html = bridgeScript + html;
+                }
+                
+                // Add base tag so relative resources load correctly
+                const baseHref = contextUrl.substring(0, contextUrl.lastIndexOf('/'));
+                const baseTag = `<base href="${baseHref}/">\n<script>window.editorBasePath = "${baseHref}";<\/script>\n`;
+                html = html.replace('<head>', '<head>\n' + baseTag);
+
+                // Rewrite document
+                document.open();
+                document.write(html);
+                document.close();
+
+            } catch (e) {
+                document.getElementById('loading').textContent = `Error loading preview: ${e.message}`;
+            }
+        }
+
+        loadContext();
+    </script>
+</body>
+</html>

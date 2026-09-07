@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Slide Editor</title>
+    <link rel="stylesheet" href="css/editor.css">
+    
+    <!-- CodeMirror 5 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    
+    <!-- CodeMirror Markdown mode -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+
+    <!-- App Scripts -->
+    <script type="module" src="js/app.js" defer></script>
+</head>
+<body>
+    <div class="editor-layout">
+        <!-- Sidebar: File Tree & Outline -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Workspace</h2>
+            </div>
+            <div id="file-tree" class="file-tree">
+                <!-- Populated by file-tree.js -->
+            </div>
+            
+            <div class="sidebar-header" style="margin-top: 20px;">
+                <h2>Slide Outline</h2>
+            </div>
+            <div id="slide-outline" class="slide-outline">
+                <!-- Populated by outline.js -->
+            </div>
+        </aside>
+
+        <div class="resizer" id="sidebar-resizer"></div>
+
+        <!-- Main Editor Area -->
+        <main class="main-content">
+            <div class="toolbar">
+                <select id="presentation-file-selector" style="max-width: 600px; padding: 4px 8px; border-radius: 4px; background: #333; color: white; border: 1px solid #555; text-overflow: ellipsis; white-space: nowrap;"></select>
+                <div class="toolbar-actions">
+                    <!-- Tool manager buttons will be injected here -->
+                </div>
+            </div>
+            
+            <div class="split-pane">
+                <!-- CodeMirror Container -->
+                <div id="editor-container" class="pane editor-pane" style="flex: 1;">
+                    <textarea id="markdown-editor" style="display: none;"></textarea>
+                </div>
+                
+                <!-- Resizer -->
+                <div class="resizer" id="dragMe"></div>
+                
+                <!-- Live Preview Container -->
+                <div class="pane preview-pane" style="flex: 1;">
+
+                    <iframe id="preview-iframe" src="preview.html" frameborder="0"></iframe>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Image Paste Modal -->
+    <div id="paste-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Save Pasted Image</h3>
+            <label for="paste-filename">Path (relative to workspace):</label>
+            <input type="text" id="paste-filename" value="assets/image_01.png">
+            <div class="modal-actions">
+                <button id="btn-paste-cancel">Cancel</button>
+                <button id="btn-paste-save" class="primary">Save & Insert</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

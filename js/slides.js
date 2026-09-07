@@ -16,6 +16,7 @@ window.prevSlide = prevSlide;
 window.showDemo = showDemo;
 window.hideDemo = hideDemo;
 window.toggleExpand = toggleExpand;
+window.SlideAddons = SlideAddons;
 
 // --- Auto-detect engine paths via import.meta.url ---
 // This makes the engine mount-path-agnostic: works at engine/, lib/engine/, or repo root.
@@ -54,7 +55,7 @@ const SLIDE_SEPARATOR = '\n---\n';
  */
 function injectEngineBoilerplate() {
     // 1. Inject CSS
-    const ENGINE_CSS_URL = new URL('../css/slides.css?v=6', ENGINE_JS_DIR).href;
+    const ENGINE_CSS_URL = new URL('../css/slides.css?v=7', ENGINE_JS_DIR).href;
     if (!document.querySelector(`link[href="${ENGINE_CSS_URL}"]`)) {
         const link = document.createElement('link');
         link.rel = 'stylesheet';
@@ -132,7 +133,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadDependencies();
 
         let rawMarkdown = '';
-        let basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+        let basePath = window.editorBasePath || window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
         
         const template = document.getElementById('markdown-source');
         const urlParams = new URLSearchParams(window.location.search);
@@ -215,7 +216,12 @@ async function resolveIncludesInString(basePath, markdownStr, visited = new Set(
             try {
                 const response = await fetch(fullUrl, { cache: 'no-cache' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const content = await response.text();
+                let content = await response.text();
+                
+                // Editor tracking: inject marker at the start of every slide in this file
+                if (window.isEditorPreview) {
+                    content = `\n<!-- SOURCE: ${fullUrl} -->\n` + content.replace(/\n---\n/g, `\n---\n<!-- SOURCE: ${fullUrl} -->\n`);
+                }
                 
                 const newBasePath = fullUrl.substring(0, fullUrl.lastIndexOf('/'));
                 const includedContent = await resolveIncludesInString(newBasePath, content, visited);
@@ -293,6 +299,7 @@ function showSlide(index) {
 
     updateCounter();
 }
+window.showSlide = showSlide;
 
 function nextSlide() {
     showSlide(currentSlideIndex + 1);
@@ -464,12 +471,43 @@ function updateSlideScale() {
     const baseWidth = 1600;
     const baseHeight = 900;
     
-    // Normal mode fits within 90% width / 85% height
-    // Expanded mode fills 100% of the window
-    const targetWidth = isExpanded ? window.innerWidth : window.innerWidth * 0.9;
-    const targetHeight = isExpanded ? window.innerHeight : window.innerHeight * 0.85;
+    // Calculate available area
+    let targetWidth, targetHeight;
     
+    if (isExpanded) {
+        targetWidth = window.innerWidth;
+        targetHeight = window.innerHeight;
+    } else {
+        // For small windows, margins should be small. Max margin is 40px.
+        const marginX = Math.min(window.innerWidth * 0.1, 80) * 2;
+        const marginY = Math.min(window.innerHeight * 0.1, 80) * 2;
+        targetWidth = window.innerWidth - marginX;
+        targetHeight = window.innerHeight - marginY;
+    }
+    
+    // Calculate the perfect scale to maintain 16:9 ratio
     const scale = Math.min(targetWidth / baseWidth, targetHeight / baseHeight);
-    document.documentElement.style.setProperty('--slide-scale', scale);
+    
+    // Calculate physical dimensions after scaling
+    const visualWidth = baseWidth * scale;
+    const visualHeight = baseHeight * scale;
+    
+    // Calculate offsets to perfectly center the slide in the window
+    const leftOffset = (window.innerWidth - visualWidth) / 2;
+    const topOffset = (window.innerHeight - visualHeight) / 2;
+    
+    // Apply explicitly via JS (bypassing any CSS layout quirks)
+    slides.forEach(slide => {
+        slide.style.position = 'absolute';
+        slide.style.left = leftOffset + 'px';
+        slide.style.top = topOffset + 'px';
+        slide.style.width = baseWidth + 'px';
+        slide.style.height = baseHeight + 'px';
+        slide.style.transformOrigin = 'top left';
+        slide.style.transform = 'scale(' + scale + ')';
+        slide.style.margin = '0';
+        slide.style.maxWidth = 'none';
+        slide.style.maxHeight = 'none';
+    });
 }
 window.addEventListener('resize', updateSlideScale);

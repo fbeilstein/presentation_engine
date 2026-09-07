@@ -17,6 +17,7 @@ window.showDemo = showDemo;
 window.hideDemo = hideDemo;
 window.toggleExpand = toggleExpand;
 window.SlideAddons = SlideAddons;
+window.updateSlideScale = updateSlideScale;
 
 // --- Auto-detect engine paths via import.meta.url ---
 // This makes the engine mount-path-agnostic: works at engine/, lib/engine/, or repo root.
@@ -46,7 +47,7 @@ let currentSlideIndex = 0;
 let slides = [];
 
 // Configuration
-const SLIDE_SEPARATOR = '\n---\n';
+const SLIDE_SEPARATOR = /^---$/gm;
 
 // Deprecated: Marked options now initialized in loadDependencies() after the library is fetched.
 
@@ -168,8 +169,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             throw new Error("No markdown source found. Ensure `<template id='markdown-source'>` exists or provide `?file=` URL parameter.");
         }
 
+        let mainFile = window.location.pathname;
+        if (urlParams.has('context')) {
+            mainFile = urlParams.get('context');
+        }
+        mainFile = mainFile.replace(/^\//, '');
+
         // Recursively resolve any !include() statements inside the Markdown
-        const finalMarkdown = await resolveIncludesInString(basePath, rawMarkdown);
+        const finalMarkdown = await resolveIncludesInString(basePath, rawMarkdown, new Set(), [mainFile]);
 
         parseAndInjectSlides(finalMarkdown);
 
@@ -197,7 +204,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 /**
  * Recursively parses markdown string for !include(filename.md) and fetches them.
  */
-async function resolveIncludesInString(basePath, markdownStr, visited = new Set()) {
+async function resolveIncludesInString(basePath, markdownStr, visited = new Set(), includeStack = []) {
     const lines = markdownStr.split('\n');
     const resolvedLines = [];
 
@@ -218,13 +225,17 @@ async function resolveIncludesInString(basePath, markdownStr, visited = new Set(
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 let content = await response.text();
                 
+                const newStack = [...includeStack, fullUrl];
+                const stackStr = newStack.join('|');
+                
                 // Editor tracking: inject marker at the start of every slide in this file
                 if (window.isEditorPreview) {
-                    content = `\n<!-- SOURCE: ${fullUrl} -->\n` + content.replace(/\n---\n/g, `\n---\n<!-- SOURCE: ${fullUrl} -->\n`);
+                    let localIndex = 0;
+                    content = `\n<!-- SOURCE: ${stackStr}:${localIndex++} -->\n` + content.replace(/^---$/gm, () => `\n---\n<!-- SOURCE: ${stackStr}:${localIndex++} -->\n`);
                 }
                 
                 const newBasePath = fullUrl.substring(0, fullUrl.lastIndexOf('/'));
-                const includedContent = await resolveIncludesInString(newBasePath, content, visited);
+                const includedContent = await resolveIncludesInString(newBasePath, content, visited, newStack);
                 resolvedLines.push(includedContent);
             } catch (e) {
                 resolvedLines.push(`\n> **Error** including \`${fullUrl}\`: ${e.message}\n`);

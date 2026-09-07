@@ -104,7 +104,7 @@ export function initEditor() {
 
 export function loadFile(path, content) {
     currentFilePath = path;
-    lastKnownSlideCount = (content.match(/^---$/gm) || []).length;
+    lastKnownSlideCount = (content.replace(/\r/g, '').match(/^---$/gm) || []).length;
     editorView.setValue(content);
     
     // Auto-load corresponding HTML preview
@@ -116,47 +116,74 @@ export function loadFile(path, content) {
 
 let lastKnownSlideCount = -1;
 
+function getMarkdownContentInfo(content, cursorObj) {
+    let text = content;
+    let textBeforeCursor = cursorObj ? editorView.getRange({line: 0, ch: 0}, cursorObj) : "";
+    
+    if (currentFilePath && currentFilePath.endsWith('.html')) {
+        // Extract only the content inside <script type="text/markdown">
+        const match = content.match(/<script type="text\/markdown"[^>]*>([\s\S]*?)<\/script>/);
+        if (match) {
+            text = match[1];
+        }
+        if (cursorObj) {
+            const startMatch = textBeforeCursor.match(/<script type="text\/markdown"[^>]*>([\s\S]*)$/);
+            if (startMatch) {
+                textBeforeCursor = startMatch[1];
+            } else {
+                textBeforeCursor = ""; // Cursor is outside or before the script block
+            }
+        }
+    }
+    
+    let normalizedText = text.replace(/\r/g, '');
+    let normalizedTextBefore = textBeforeCursor.replace(/\r/g, '');
+    
+    return {
+        totalSlides: (normalizedText.match(/^---$/gm) || []).length,
+        localIndex: (normalizedTextBefore.match(/^---$/gm) || []).length,
+        allSlides: normalizedText.split(/^---$/gm)
+    };
+}
+
 async function updatePreview() {
     const content = editorView.getValue();
     const iframe = document.getElementById('preview-iframe');
-    
-    // Calculate current local slide based on cursor
     const cursor = editorView.getCursor();
-    const textBeforeCursor = editorView.getRange({line: 0, ch: 0}, cursor);
-    const localSlideIndex = (textBeforeCursor.match(/^---$/gm) || []).length;
     
-    const currentSlideCount = (content.match(/^---$/gm) || []).length;
+    const info = getMarkdownContentInfo(content, cursor);
     
+    console.log("updatePreview: lastKnownSlideCount =", lastKnownSlideCount, "info.totalSlides =", info.totalSlides);
     // If this is the first time checking, or if the number of slides changed, reload the whole preview
-    if (lastKnownSlideCount !== -1 && currentSlideCount !== lastKnownSlideCount) {
-        lastKnownSlideCount = currentSlideCount;
+    if (lastKnownSlideCount !== -1 && info.totalSlides !== lastKnownSlideCount) {
+        console.log("RELOADING!");
+        lastKnownSlideCount = info.totalSlides;
         iframe.contentWindow.location.reload();
         return;
     }
-    lastKnownSlideCount = currentSlideCount;
+    lastKnownSlideCount = info.totalSlides;
     
-    const allSlides = content.split(/^---$/gm);
-    const currentSlideMarkdown = allSlides[localSlideIndex] || "";
+    const currentSlideMarkdown = info.allSlides[info.localIndex] || "";
     
     iframe.contentWindow.postMessage({
         type: 'update_slide',
         file: currentFilePath,
-        localIndex: localSlideIndex,
+        localIndex: info.localIndex,
         markdown: currentSlideMarkdown
     }, '*');
 }
 
 function syncPreviewToCursor() {
     if (!currentFilePath) return;
+    const content = editorView.getValue();
     const cursor = editorView.getCursor();
-    const textBeforeCursor = editorView.getRange({line: 0, ch: 0}, cursor);
-    const localSlideIndex = (textBeforeCursor.match(/^---$/gm) || []).length;
+    const info = getMarkdownContentInfo(content, cursor);
     
     const iframe = document.getElementById('preview-iframe');
     iframe.contentWindow.postMessage({
         type: 'sync_slide',
         file: currentFilePath,
-        localIndex: localSlideIndex
+        localIndex: info.localIndex
     }, '*');
 }
 

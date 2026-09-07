@@ -47,15 +47,36 @@ function buildSlideMapping() {
     // the source markers will tell us the exact file.
 
     slides.forEach((slide, globalIndex) => {
-        // Look for the source marker comment injected by our modified slides.js
         const html = slide.innerHTML;
-        const sourceMatch = html.match(/<!-- SOURCE: ([^\s]+) -->/);
+        // Find all source markers: <!-- SOURCE: file:localIndex --> or fallback <!-- SOURCE: file -->
+        const matches = [...html.matchAll(/<!-- SOURCE: ([^\s:]+)(?::(\d+))? -->/g)];
         
         let file = null;
-        if (sourceMatch) {
-            file = sourceMatch[1];
-            // Normalize path
-            file = normalizePath(file);
+        let fileStack = [];
+        let localIndex = null;
+        let allSources = [];
+
+        if (matches.length > 0) {
+            // The last marker generally indicates the file that actually provided the content
+            const lastMatch = matches[matches.length - 1];
+            const stackStr = lastMatch[1];
+            fileStack = stackStr.split('|').map(normalizePath);
+            file = fileStack[fileStack.length - 1];
+            
+            if (lastMatch[2] !== undefined) {
+                localIndex = parseInt(lastMatch[2], 10);
+            }
+            
+            // Record all sources for sync
+            allSources = matches.map(m => {
+                const sStr = m[1];
+                const fStack = sStr.split('|').map(normalizePath);
+                return {
+                    file: fStack[fStack.length - 1],
+                    fileStack: fStack,
+                    localIndex: m[2] !== undefined ? parseInt(m[2], 10) : null
+                };
+            });
         } else {
             // If there's no SOURCE marker, it's from the main template
             file = new URLSearchParams(window.location.search).get('context');
@@ -64,20 +85,33 @@ function buildSlideMapping() {
             } else {
                 file = 'unknown';
             }
+            fileStack = [file];
         }
 
         if (fileLocalCounts[file] === undefined) {
             fileLocalCounts[file] = 0;
         }
         
+        // If localIndex wasn't provided by the marker, use our own counter
+        if (localIndex === null) {
+            localIndex = fileLocalCounts[file];
+        }
+
         const h1 = slide.querySelector('h1, h2, h3');
         const title = h1 ? h1.textContent.trim() : `Slide ${globalIndex + 1}`;
+
+        // Check if slide is practically empty (only HTML comments and whitespace)
+        const textContent = slide.innerHTML.replace(/<!--[\s\S]*?-->/g, '').trim();
+        const isEmpty = textContent === '';
 
         slideMapping.push({
             globalIndex: globalIndex,
             file: file,
-            localIndex: fileLocalCounts[file],
-            title: title
+            fileStack: fileStack,
+            localIndex: localIndex,
+            sources: allSources,
+            title: title,
+            isEmpty: isEmpty
         });
 
         fileLocalCounts[file]++;
@@ -97,7 +131,14 @@ function buildSlideMapping() {
 window.addEventListener('message', (e) => {
     if (e.data.type === 'sync_slide') {
         const { file, localIndex } = e.data;
-        const globalIndex = slideMapping.findIndex(s => s.file === file && s.localIndex === localIndex);
+        const globalIndex = slideMapping.findIndex(s => {
+            // Match primary file/index
+            if (s.file === file && s.localIndex === localIndex) return true;
+            // Match any of the sources (for includes)
+            if (s.sources && s.sources.some(src => src.file === file && src.localIndex === localIndex)) return true;
+            return false;
+        });
+        
         if (globalIndex !== -1 && window.showSlide) {
             window.showSlide(globalIndex);
         }
@@ -211,5 +252,10 @@ function updateSingleSlide(globalIndex, rawMd) {
     // Make sure we're showing this slide
     if (window.showSlide) {
         window.showSlide(globalIndex);
+    }
+    
+    // Ensure scaling is applied correctly
+    if (window.updateSlideScale) {
+        window.updateSlideScale();
     }
 }

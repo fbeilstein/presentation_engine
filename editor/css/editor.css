@@ -84,7 +84,7 @@ body, html {
 }
 
 .outline-item {
-    padding: 6px 15px;
+    padding: 3px 5px;
     cursor: pointer;
     font-size: 13px;
     border-left: 3px solid transparent;
@@ -266,4 +266,63 @@ body, html {
     background-color: var(--accent-color);
     border-color: var(--accent-color);
     color: white;
+}
+
+/* Outline File Groups */
+.outline-file-group {
+    margin-bottom: 8px;
+    border-left: 4px solid transparent;
+}
+
+.outline-file-badge {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+    cursor: default;
+    user-select: none;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.outline-file-badge.empty-file {
+    opacity: 0.7;
+    cursor: pointer;
+}
+
+.outline-item.selected {
+    background-color: rgba(60, 130, 240, 0.3);
+}
+
+.outline-item.drag-over {
+    border-top: 2px solid var(--accent-color);
+}
+
+/* Context Menu */
+.context-menu {
+    position: fixed;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    z-index: 10000;
+    padding: 5px 0;
+    border-radius: 4px;
+    min-width: 150px;
+}
+
+.context-menu-item {
+    padding: 8px 15px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text-color);
+}
+
+.context-menu-item:hover {
+    background-color: var(--hover-bg);
+}
+
+.context-menu-divider {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 4px 0;
 }

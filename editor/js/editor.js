@@ -204,7 +204,7 @@ window.addEventListener('message', (e) => {
             });
             if (currentFilePath && files.includes(currentFilePath)) {
                 select.value = currentFilePath;
-            } else if (!currentFilePath) {
+            } else {
                 select.value = files[0];
                 loadFileFromServer(files[0]);
             }

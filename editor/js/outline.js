@@ -82,7 +82,7 @@ export function renderGlobalOutline(slides) {
             groupEl.style.borderLeftColor = color;
             // Indent child groups
             if (i > 0) {
-                groupEl.style.marginLeft = '12px';
+                groupEl.style.marginLeft = '4px';
             }
             
             const badge = document.createElement('div');
@@ -451,6 +451,7 @@ async function handleDrop(e, targetGlobalIndex) {
         localIndexes.sort((a,b) => b - a); // descending
         
         let content = (file === currentFilePath) ? editorView.getValue() : await fetchFileContent(file);
+        content = content.replace(/\r/g, '');
         const chunks = content.split(/^---$/gm);
         
         for (let i of localIndexes) {
@@ -479,6 +480,7 @@ async function handleDrop(e, targetGlobalIndex) {
     
     // Insert into target
     let targetContent = (targetFile === currentFilePath) ? editorView.getValue() : await fetchFileContent(targetFile);
+    targetContent = targetContent.replace(/\r/g, '');
     const targetChunks = targetContent.split(/^---$/gm);
     
     targetChunks.splice(insertLocalIndex, 0, ...extractedTextBlocks);

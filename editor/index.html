@@ -13,6 +13,11 @@
     <!-- CodeMirror Markdown mode -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
 
+    <!-- CodeMirror Folding -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+
     <!-- App Scripts -->
     <script type="module" src="js/app.js" defer></script>
 </head>
@@ -42,6 +47,7 @@
             <div class="toolbar">
                 <select id="presentation-file-selector" style="max-width: 600px; padding: 4px 8px; border-radius: 4px; background: #333; color: white; border: 1px solid #555; text-overflow: ellipsis; white-space: nowrap;"></select>
                 <div class="toolbar-actions">
+                    <button id="save-btn" class="tool-btn" title="Save to Disk (Ctrl+S)">💾 Save</button>
                     <!-- Tool manager buttons will be injected here -->
                 </div>
             </div>

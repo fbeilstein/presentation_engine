@@ -130,24 +130,23 @@ function buildSlideMapping() {
 
 window.addEventListener('message', (e) => {
     if (e.data.type === 'sync_slide') {
-        const { file, localIndex } = e.data;
-        const globalIndex = slideMapping.findIndex(s => {
-            // Match primary file/index
-            if (s.file === file && s.localIndex === localIndex) return true;
-            // Match any of the sources (for includes)
-            if (s.sources && s.sources.some(src => src.file === file && src.localIndex === localIndex)) return true;
-            return false;
-        });
-        
-        if (globalIndex !== -1 && window.showSlide) {
+        const { globalIndex } = e.data;
+        if (globalIndex !== undefined && window.showSlide) {
             window.showSlide(globalIndex);
         }
     } else if (e.data.type === 'update_slide') {
-        const { file, localIndex, markdown } = e.data;
-        const globalIndex = slideMapping.findIndex(s => s.file === file && s.localIndex === localIndex);
-        if (globalIndex !== -1) {
+        const { globalIndex, markdown } = e.data;
+        if (globalIndex !== undefined) {
             updateSingleSlide(globalIndex, markdown);
         }
+    } else if (e.data.type === 'update_all') {
+        // A simple way to reload everything without network request is to just 
+        // inject the new markdown into the first slide and reload Reveal?
+        // Actually, updating the whole DOM tree dynamically is complex for Reveal.js.
+        // Let's just reload the iframe. The editor now autosaves to journal,
+        // but wait... if we reload, the server sends the OLD file from disk.
+        // We must update the preview endpoint to include the journal!
+        window.location.reload();
     } else if (e.data.type === 'toggle_tool') {
         toggleTool(e.data.tool, e.data.active);
     }

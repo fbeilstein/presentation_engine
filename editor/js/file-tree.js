@@ -47,9 +47,10 @@ function renderTree(nodes, container) {
                 loadFile(node.path, data.content);
             });
         } else if (!node.is_dir && node.name.endsWith('.html') && !node.path.includes('engine/')) {
-            el.addEventListener('click', () => {
-                const iframe = document.getElementById('preview-iframe');
-                iframe.src = 'preview.html?context=/' + node.path;
+            el.addEventListener('click', async () => {
+                const res = await fetch(`/api/file?path=${encodeURIComponent(node.path)}`);
+                const data = await res.json();
+                import('./editor.js').then(m => m.loadFileFromServer(node.path));
             });
         }
         

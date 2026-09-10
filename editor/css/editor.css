@@ -177,6 +177,11 @@ body, html {
     border-left: 2px solid #fff !important;
 }
 
+.include-stripes {
+    width: 20px;
+    background-color: var(--panel-bg);
+}
+
 /* Preview Pane */
 .preview-pane {
     background-color: #fff; /* Engine defaults to dark anyway if it sets it */
@@ -294,8 +299,12 @@ body, html {
     background-color: rgba(60, 130, 240, 0.3);
 }
 
-.outline-item.drag-over {
+.outline-item.drag-over-top {
     border-top: 2px solid var(--accent-color);
+}
+
+.outline-item.drag-over-bottom {
+    border-bottom: 2px solid var(--accent-color);
 }
 
 /* Context Menu */
@@ -325,4 +334,9 @@ body, html {
     height: 1px;
     background-color: var(--border-color);
     margin: 4px 0;
+}
+
+.CodeMirror-gutter-wrapper,
+.CodeMirror-gutter-elt {
+    height: 100%;
 }

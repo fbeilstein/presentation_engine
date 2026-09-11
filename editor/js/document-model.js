@@ -39,7 +39,7 @@ export class DocumentModel {
                 return;
             }
             const data = await res.json();
-            this.fileCache[path] = data.content || "";
+            this.fileCache[path] = (data.content || "").replace(/\r/g, '');
             
             const lines = this.fileCache[path].split('\n');
             for (const line of lines) {
@@ -136,7 +136,31 @@ export class DocumentModel {
         // We need to apply this edit to our fileCache strings.
         // A change happens within a specific file region.
         
-        // 1. Identify which node the `from` line belongs to.
+        // 1. Identify all files affected by the deletion
+        const fileEdits = {};
+        for (let i = 0; i < change.removed.length; i++) {
+            const nodeInfo = this.flatLines[change.from.line + i];
+            if (!nodeInfo) continue;
+            const file = nodeInfo.node.file;
+            if (!fileEdits[file]) {
+                fileEdits[file] = {
+                    startLocalLine: nodeInfo.localIndex,
+                    endLocalLine: nodeInfo.localIndex
+                };
+            } else {
+                fileEdits[file].endLocalLine = nodeInfo.localIndex;
+            }
+        }
+        
+        const affectedFiles = Object.keys(fileEdits);
+        
+        if (affectedFiles.length > 1) {
+            console.warn("Cross-file edits are not supported. Reverting.");
+            // By not updating fileCache and triggering a rebuild, it will revert CodeMirror.
+            this.rebuildTree(true);
+            return false;
+        }
+        
         const startNodeInfo = this.flatLines[change.from.line];
         if (!startNodeInfo) return false; // out of bounds
         
@@ -147,15 +171,8 @@ export class DocumentModel {
         const fileContent = this.fileCache[file];
         if (fileContent !== undefined) {
             const lines = fileContent.split('\n');
-            
-            // Map the flat buffer line number to the local line number in the file
-            const localStartLine = startNodeInfo.localIndex;
-            
-            // If it's a multi-line deletion crossing boundaries, it's complex.
-            // For now, assume most edits are within a single file's boundaries.
-            // Replace the local lines corresponding to `removed` with `text`.
-            
-            let localEndLine = localStartLine + change.removed.length - 1;
+            const localStartLine = fileEdits[file].startLocalLine;
+            const localEndLine = fileEdits[file].endLocalLine;
             
             // Reconstruct the new lines array
             const prefix = lines.slice(0, localStartLine);
@@ -165,12 +182,17 @@ export class DocumentModel {
             const firstLineOrig = lines[localStartLine] || "";
             const lastLineOrig = lines[localEndLine] || "";
             
-            const newFirstLine = firstLineOrig.substring(0, change.from.ch) + change.text[0];
-            const newLastLine = change.text[change.text.length - 1] + lastLineOrig.substring(change.to.ch);
-            
             let insertedLines = [...change.text];
-            insertedLines[0] = newFirstLine;
-            insertedLines[insertedLines.length - 1] = newLastLine;
+            
+            if (change.text.length === 1) {
+                // If the replacement is just one line, we must join the first line's prefix and the last line's suffix together.
+                insertedLines[0] = firstLineOrig.substring(0, change.from.ch) + change.text[0] + lastLineOrig.substring(change.to.ch);
+            } else {
+                const newFirstLine = firstLineOrig.substring(0, change.from.ch) + change.text[0];
+                const newLastLine = change.text[change.text.length - 1] + lastLineOrig.substring(change.to.ch);
+                insertedLines[0] = newFirstLine;
+                insertedLines[insertedLines.length - 1] = newLastLine;
+            }
             
             const newLines = prefix.concat(insertedLines).concat(suffix);
             this.fileCache[file] = newLines.join('\n');

@@ -15,7 +15,11 @@ export async function initDocument(path, cmView) {
         const text = currentModel.getFlatText();
         if (cmView.getValue() !== text) {
             currentModel.ignoreNextChange = true;
+            
+            // Preserve undo history by saving and restoring it manually
+            const hist = cmView.getHistory();
             cmView.setValue(text);
+            cmView.setHistory(hist);
         }
     };
     await currentModel.loadRoot(path);

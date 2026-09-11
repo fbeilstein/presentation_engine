@@ -149,32 +149,20 @@ export function initEditor() {
             return;
         }
         
-        // Pass the changes to document model
-        let needsRebuild = false;
-        for (const change of changes) {
-            if (currentDocumentModel.applyChange(change)) {
-                needsRebuild = true;
+        let structureChanged = false;
+        changes.forEach(c => {
+            if (currentDocumentModel.applyChange(c)) {
+                structureChanged = true;
+                currentDocumentModel.rebuildTree(false);
             }
-        }
+        });
         
-        if (needsRebuild) {
-            // Need to fetch missing files or re-render flat text because a duplicate include was edited
-            const oldCursor = cm.getCursor();
-            // Actually, we must be careful not to break CM state during a change event.
-            // We should do it asynchronously.
-            setTimeout(async () => {
-                await currentDocumentModel.loadRoot(currentFilePath); // refetch if needed
-                const text = currentDocumentModel.getFlatText();
-                if (cm.getValue() !== text) {
-                    currentDocumentModel.ignoreNextChange = true;
-                    cm.setValue(text);
-                    cm.setCursor(oldCursor);
-                }
-            }, 0);
+        if (structureChanged) {
+            renderStripes();
         }
         
         handleEditorChange(cm);
-        syncPreviewToCursor();
+        updatePreview();
     });
     
     editorView.on('cursorActivity', () => {
@@ -256,34 +244,64 @@ async function updatePreview() {
     const info = getMarkdownContentInfo(content, cursor);
     
     // If this is the first time checking, or if the number of slides changed, reload the whole preview
-    // Actually, we can't just reload anymore because we don't autosave to disk!
-    // If the slide count changed, we must send the entire presentation markdown to the iframe.
-    // For now, let's just trigger a full update if slide count changes.
+    // We must wait for the journal to save first! Otherwise the iframe fetches stale disk content.
     if (lastKnownSlideCount !== -1 && info.totalSlides !== lastKnownSlideCount) {
         lastKnownSlideCount = info.totalSlides;
-        iframe.contentWindow.postMessage({
-            type: 'update_all',
-            markdown: content
-        }, '*');
+        
+        const reloadOnSave = () => {
+            iframe.contentWindow.location.reload();
+            window.removeEventListener('editor-content-changed', reloadOnSave);
+        };
+        window.addEventListener('editor-content-changed', reloadOnSave);
         return;
     }
     lastKnownSlideCount = info.totalSlides;
     
-    const currentSlideMarkdown = info.allSlides[info.localIndex] || "";
-    
-    let targetGlobalIndex = info.localIndex;
-    if (globalSlideMapping && globalSlideMapping.length > 0 && currentFilePath) {
-        const slide = globalSlideMapping.find(s => s.file === currentFilePath && s.localIndex === info.localIndex);
-        if (slide) {
-            targetGlobalIndex = slide.globalIndex;
+    if (globalSlideMapping && globalSlideMapping.length > 0 && currentDocumentModel) {
+        const isFirstRun = Object.keys(window.lastSentSlideContent).length === 0;
+        
+        // Group slides by file so we can update slides across all included files
+        const slidesByFile = {};
+        globalSlideMapping.forEach(s => {
+            if (!slidesByFile[s.file]) slidesByFile[s.file] = [];
+            slidesByFile[s.file].push(s);
+        });
+        
+        for (const [file, fileSlides] of Object.entries(slidesByFile)) {
+            let unmergedText = currentDocumentModel.fileCache[file];
+            if (unmergedText === undefined) continue;
+            
+            if (file.endsWith('.html')) {
+                const match = unmergedText.match(/<script type="text\/markdown"[^>]*>([\s\S]*?)<\/script>/);
+                if (match) {
+                    unmergedText = match[1];
+                }
+            }
+            
+            const unmergedSlides = unmergedText.replace(/\r/g, '').split(/^---$/gm);
+            fileSlides.forEach(slide => {
+                const md = unmergedSlides[slide.localIndex] || "";
+                if (isFirstRun) {
+                    window.lastSentSlideContent[slide.globalIndex] = md;
+                } else if (window.lastSentSlideContent[slide.globalIndex] !== md) {
+                    window.lastSentSlideContent[slide.globalIndex] = md;
+                    iframe.contentWindow.postMessage({
+                        type: 'update_slide',
+                        globalIndex: slide.globalIndex,
+                        markdown: md
+                    }, '*');
+                }
+            });
         }
+    } else {
+        // Fallback for standalone edit
+        const currentSlideMarkdown = info.allSlides[info.localIndex] || "";
+        iframe.contentWindow.postMessage({
+            type: 'update_slide',
+            globalIndex: info.localIndex,
+            markdown: currentSlideMarkdown
+        }, '*');
     }
-    
-    iframe.contentWindow.postMessage({
-        type: 'update_slide',
-        globalIndex: targetGlobalIndex,
-        markdown: currentSlideMarkdown
-    }, '*');
 }
 
 function syncPreviewToCursor() {
@@ -295,20 +313,24 @@ function syncPreviewToCursor() {
     if (!iframe) return;
     
     let targetGlobalIndex = info.localIndex; // Fallback to merged index
-    
-    if (globalSlideMapping && globalSlideMapping.length > 0 && currentDocumentModel && currentDocumentModel.flatLines) {
-        const flatLine = currentDocumentModel.flatLines[cursor.line];
-        if (flatLine && flatLine.node) {
-            const actualFile = flatLine.node.file;
-            const unmergedText = currentDocumentModel.fileCache[actualFile];
-            if (unmergedText) {
-                const textBeforeCursorInFile = unmergedText.split('\n').slice(0, flatLine.localIndex).join('\n');
-                const unmergedSlideIndex = (textBeforeCursorInFile.match(/^---$/gm) || []).length;
-                
-                const slide = globalSlideMapping.find(s => s.file === actualFile && s.localIndex === unmergedSlideIndex);
-                if (slide) {
-                    targetGlobalIndex = slide.globalIndex;
+    if (globalSlideMapping && globalSlideMapping.length > 0 && currentDocumentModel) {
+        const nodeInfo = currentDocumentModel.flatLines[cursor.line];
+        if (nodeInfo) {
+            const file = nodeInfo.node.file;
+            const fileContent = currentDocumentModel.fileCache[file] || "";
+            const fileLines = fileContent.split('\n');
+            
+            // Count how many '---' lines exist before nodeInfo.localIndex
+            let localSlideIndex = 0;
+            for (let i = 0; i < nodeInfo.localIndex; i++) {
+                if (fileLines[i].trim() === '---') {
+                    localSlideIndex++;
                 }
+            }
+            
+            const slide = globalSlideMapping.find(s => s.file === file && s.localIndex === localSlideIndex);
+            if (slide) {
+                targetGlobalIndex = slide.globalIndex;
             }
         }
     }
@@ -320,8 +342,10 @@ function syncPreviewToCursor() {
 }
 
 // Listen for messages from preview iframe
+window.lastSentSlideContent = {};
 window.addEventListener('message', (e) => {
     if (e.data.type === 'presentation_loaded') {
+        window.lastSentSlideContent = {};
         const { files, slides } = e.data;
         
         // Populate Dropdown

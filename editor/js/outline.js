@@ -281,12 +281,6 @@ function updateFileInModel(file, newContent) {
     if (currentDocumentModel && currentDocumentModel.fileCache[file] !== undefined) {
         currentDocumentModel.fileCache[file] = newContent;
         currentDocumentModel.rebuildTree();
-        
-        if (currentFilePath === file) {
-            currentDocumentModel.ignoreNextChange = true;
-            editorView.setValue(newContent);
-        }
-        
         handleEditorChange(editorView);
     }
 }
@@ -486,93 +480,119 @@ async function handleDrop(e, targetGlobalIndex, fallbackTargetFile = null) {
     
     const sortedIdx = Array.from(selectedSlides).sort((a,b) => a-b);
     
-    // Collect contents of selected slides
-    const extractedTextBlocks = [];
+    // Perform slide rearrangement purely via CodeMirror edits to preserve undo stack
+    const doc = editorView.getDoc();
     
-    // Remove from source files
-    const toDelete = {};
+    // Helper to find the line range of a global slide index
+    const getSlideLineRange = (globalIndex) => {
+        const fullText = doc.getValue();
+        const hasScript = fullText.includes('<script type="text/markdown"');
+        let inMarkdown = !hasScript;
+        
+        let currentSlide = 0;
+        let startLine = -1;
+        const totalLines = doc.lineCount();
+        
+        for (let i = 0; i < totalLines; i++) {
+            const text = doc.getLine(i);
+            
+            // Handle script wrappers
+            if (hasScript && text.includes('<script type="text/markdown"')) {
+                inMarkdown = true;
+                startLine = i + 1;
+                continue;
+            }
+            if (hasScript && text.includes('</script>') && inMarkdown) {
+                if (currentSlide === globalIndex) return { start: startLine, end: i - 1 };
+                inMarkdown = false;
+            }
+            
+            if (!inMarkdown) {
+                if (startLine === -1 && i === 0) startLine = 0; // Fallback
+            } else {
+                if (text.trim() === '---') {
+                    if (currentSlide === globalIndex) {
+                        return { start: startLine, end: i - 1 };
+                    }
+                    currentSlide++;
+                    startLine = i + 1;
+                }
+            }
+        }
+        
+        if (currentSlide === globalIndex) {
+            return { start: startLine, end: totalLines - 1 };
+        }
+        return null;
+    };
+    
+    // Process without .operation() so that editor.js handles each edit sequentially,
+    // firing changes -> applyChange -> rebuildTree -> flatLines rebuild in exactly the right order!
+    const extractedTexts = [];
+    for (let i = sortedIdx.length - 1; i >= 0; i--) {
+        const idx = sortedIdx[i];
+        const range = getSlideLineRange(idx);
+        if (!range) continue;
+        
+        const text = doc.getRange({line: range.start, ch: 0}, {line: range.end, ch: doc.getLine(range.end).length});
+        extractedTexts.unshift(text);
+        
+        // Delete the slide AND its trailing/leading separator, BUT ONLY if the separator is in the SAME file!
+        const startNode = currentDocumentModel ? currentDocumentModel.flatLines[range.start] : null;
+        const endNode = currentDocumentModel ? currentDocumentModel.flatLines[range.end] : null;
+        
+        let deleted = false;
+        
+        if (range.end + 1 < doc.lineCount() && doc.getLine(range.end + 1).trim() === '---') {
+            const sepNode = currentDocumentModel ? currentDocumentModel.flatLines[range.end + 1] : null;
+            if (!sepNode || (endNode && sepNode.node.file === endNode.node.file)) {
+                doc.replaceRange("", {line: range.start, ch: 0}, {line: range.end + 2, ch: 0}, "*drag");
+                deleted = true;
+            }
+        } 
+        
+        if (!deleted && range.start > 0 && doc.getLine(range.start - 1).trim() === '---') {
+            const sepNode = currentDocumentModel ? currentDocumentModel.flatLines[range.start - 1] : null;
+            if (!sepNode || (startNode && sepNode.node.file === startNode.node.file)) {
+                doc.replaceRange("", {line: range.start - 1, ch: 0}, {line: range.end, ch: doc.getLine(range.end).length}, "*drag");
+                deleted = true;
+            }
+        }
+        
+        if (!deleted) {
+            doc.replaceRange("", {line: range.start, ch: 0}, {line: range.end, ch: doc.getLine(range.end).length}, "*drag");
+        }
+    }
+        
+    // Find target insertion point
+    // Note: targetGlobalIndex might have shifted due to deletions!
+    // We recalculate target global index position.
+    let shift = 0;
     for (let idx of sortedIdx) {
-        const slide = globalSlideMapping[idx];
-        if (!toDelete[slide.file]) toDelete[slide.file] = [];
-        toDelete[slide.file].push(slide.localIndex);
+        if (idx < targetGlobalIndex) shift++;
     }
+    let adjustedTargetIndex = targetGlobalIndex - shift;
+    if (insertAfter) adjustedTargetIndex++;
     
-    for (const [file, localIndexes] of Object.entries(toDelete)) {
-        localIndexes.sort((a,b) => b - a); // descending
-        
-        let content = currentDocumentModel.fileCache[file];
-        content = content.replace(/\r/g, '');
-        
-        const { before, md, after } = extractMarkdown(content, file);
-        
-        const chunks = md.split(/^---$/gm).map(c => {
-            return c.replace(/^\n+/, '').replace(/\n+$/, '');
-        });
-        
-        for (let i of localIndexes) {
-            // Keep in correct ascending order for insertion
-            extractedTextBlocks.unshift(chunks.splice(i, 1)[0]);
-        }
-        
-        const newMd = chunks.join('\n\n---\n\n');
-        // Ensure there are newlines separating the markdown from the HTML tags if they exist
-        const prefix = before ? before + '\n' : '';
-        const suffix = after ? '\n' + after : '';
-        const newContent = prefix + newMd + suffix;
-        updateFileInModel(file, newContent);
-    }
+    let targetRange = getSlideLineRange(adjustedTargetIndex);
+    let insertPos = {line: 0, ch: 0};
+    let insertPrefix = "";
+    let insertSuffix = "";
     
-    let targetFile;
-    let insertLocalIndex;
-    
-    if (targetGlobalIndex >= 0) {
-        const targetSlide = globalSlideMapping[targetGlobalIndex];
-        targetFile = targetSlide.file;
-        insertLocalIndex = targetSlide.localIndex;
-        
-        // Adjust target index if we deleted slides BEFORE it in the SAME file
-        if (toDelete[targetFile]) {
-            let deletedBeforeTarget = toDelete[targetFile].filter(idx => idx < targetSlide.localIndex).length;
-            insertLocalIndex -= deletedBeforeTarget;
-        }
-        
-        if (insertAfter) {
-            insertLocalIndex++;
-        }
-    } else if (fallbackTargetFile) {
-        // Dropped on a file group, append to the very end
-        targetFile = fallbackTargetFile;
-        let content = currentDocumentModel.fileCache[targetFile] || "";
-        content = content.replace(/\r/g, '');
-        const { md } = extractMarkdown(content, targetFile);
-        insertLocalIndex = md.split(/^---$/gm).length; // Append at the end
+    if (targetRange) {
+        insertPos = {line: targetRange.start, ch: 0};
+        insertSuffix = "\n---\n";
     } else {
-        return;
+        // Append at the very end of the markdown block
+        targetRange = getSlideLineRange(adjustedTargetIndex - 1);
+        if (targetRange) {
+            insertPos = {line: targetRange.end, ch: doc.getLine(targetRange.end).length};
+            insertPrefix = "\n---\n";
+        }
     }
     
-    if (!currentDocumentModel.fileCache[targetFile]) {
-        console.error("Target file not in cache:", targetFile);
-        return;
-    }
-    
-    // Insert into target
-    let targetContent = currentDocumentModel.fileCache[targetFile];
-    targetContent = targetContent.replace(/\r/g, '');
-    
-    const { before: targetBefore, md: targetMd, after: targetAfter } = extractMarkdown(targetContent, targetFile);
-    
-    const targetChunks = targetMd.split(/^---$/gm).map(c => {
-        return c.replace(/^\n+/, '').replace(/\n+$/, '');
-    });
-    
-    targetChunks.splice(insertLocalIndex, 0, ...extractedTextBlocks);
-    
-    const finalMd = targetChunks.join('\n\n---\n\n');
-    const targetPrefix = targetBefore ? targetBefore + '\n' : '';
-    const targetSuffix = targetAfter ? '\n' + targetAfter : '';
-    const finalContent = targetPrefix + finalMd + targetSuffix;
-    
-    updateFileInModel(targetFile, finalContent);
+    const finalInsertText = insertPrefix + extractedTexts.join("\n---\n") + insertSuffix;
+    doc.replaceRange(finalInsertText, insertPos, insertPos, "*drag");
     
     selectedSlides.clear();
     

@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Let CodeMirror know its container size changed
             if (window.editorView) {
-                window.editorView.refresh();
+                window.editorView.requestMeasure();
             }
         }
     });
@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (iframe) iframe.style.pointerEvents = 'auto';
             
             if (window.editorView) {
-                window.editorView.refresh();
+                window.editorView.requestMeasure();
             }
         }
     });

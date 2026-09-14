@@ -1,4 +1,6 @@
 import { DocumentModel } from './document-model.js';
+import { setRegionMap } from './region-map.js';
+import { syncAnnotation } from './sync-filter.js';
 
 let currentModel = null;
 let saveTimeout = null;
@@ -12,14 +14,18 @@ function createJournalPatch(fileCache) {
 export async function initDocument(path, cmView) {
     currentModel = new DocumentModel();
     currentModel.onModelUpdated = () => {
-        const text = currentModel.getFlatText();
-        if (cmView.getValue() !== text) {
-            currentModel.ignoreNextChange = true;
-            
-            // Preserve undo history by saving and restoring it manually
-            const hist = cmView.getHistory();
-            cmView.setValue(text);
-            cmView.setHistory(hist);
+        const { flatText, map } = currentModel.buildFlatText();
+        if (cmView.state.doc.toString() !== flatText) {
+            cmView.dispatch({
+                changes: { from: 0, to: cmView.state.doc.length, insert: flatText },
+                effects: setRegionMap.of(map),
+                annotations: syncAnnotation.of(true)
+            });
+        } else {
+            cmView.dispatch({
+                effects: setRegionMap.of(map),
+                annotations: syncAnnotation.of(true)
+            });
         }
     };
     await currentModel.loadRoot(path);
@@ -34,7 +40,7 @@ export async function initDocument(path, cmView) {
                 const lastPatch = data.journal[data.journal.length - 1];
                 if (lastPatch.type === "fileCache" && lastPatch.cache) {
                     currentModel.fileCache = lastPatch.cache;
-                    currentModel.rebuildTree();
+                    if (currentModel.onModelUpdated) currentModel.onModelUpdated();
                 }
             }
         }
@@ -51,8 +57,7 @@ export function handleEditorChange(cmView) {
     // 1. Debounce and coalesce changes for journal
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(async () => {
-        const currentText = cmView.getValue();
-
+        const currentText = cmView.state.doc.toString();
         
         // 3. Save to journal
         const patch = createJournalPatch(currentModel.fileCache);

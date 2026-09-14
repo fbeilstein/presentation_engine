@@ -21,7 +21,7 @@
 
             try {
                 // Fetch the actual lecture HTML (bypass cache to see live updates)
-                const res = await fetch(contextUrl, { cache: "no-store" });
+                const res = await fetch('/' + contextUrl, { cache: "no-store" });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 let html = await res.text();
 
@@ -35,7 +35,7 @@
                 }
                 
                 // Add base tag so relative resources load correctly
-                const baseHref = contextUrl.substring(0, contextUrl.lastIndexOf('/'));
+                const baseHref = '/' + contextUrl.substring(0, contextUrl.lastIndexOf('/'));
                 const baseTag = `<base href="${baseHref}/">\n<script>window.editorBasePath = "${baseHref}";<\/script>\n`;
                 html = html.replace('<head>', '<head>\n' + baseTag);
 

@@ -22,17 +22,8 @@ function normalizePath(p) {
 // Actually, engine calls parseAndInjectSlides which sets innerHTML of #presentation-container.
 // We can observe the container.
 
-const observer = new MutationObserver((mutations) => {
-    const container = document.getElementById('presentation-container');
-    if (container && container.children.length > 0) {
-        // The engine has rendered slides. Let's build the mapping.
-        buildSlideMapping();
-        observer.disconnect(); // Only run once on initial load
-    }
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-    observer.observe(document.body, { childList: true, subtree: true });
+window.addEventListener('engine_ready', () => {
+    buildSlideMapping();
 });
 
 function buildSlideMapping() {
@@ -129,7 +120,33 @@ function buildSlideMapping() {
 }
 
 window.addEventListener('message', (e) => {
-    if (e.data.type === 'sync_slide') {
+    if (e.data.type === 'editor_slide') {
+        const { markdown, activeIndex } = e.data;
+        const allSlides = markdown.split(/^---$/gm);
+        const totalSlides = allSlides.length;
+        const slideMarkdown = allSlides[activeIndex] || '';
+
+        const container = document.getElementById('presentation-container');
+        if (!container) return;
+
+        let slideDiv = container.querySelector('.slide');
+        // In editor mode, we only want ONE slide div in the container
+        if (!slideDiv || container.children.length > 1) {
+            container.innerHTML = '';
+            slideDiv = document.createElement('div');
+            slideDiv.className = 'slide active';
+            container.appendChild(slideDiv);
+        }
+        
+        import('../../js/single-slide-renderer.js').then(renderer => {
+            renderer.updateSlideDOM(slideDiv, slideMarkdown, { addons: window.SlideAddons });
+            if (window.updateSlideScale) window.updateSlideScale();
+        }).catch(err => console.error("Failed to load slide renderer", err));
+        
+        if (window.updateCounter) {
+            window.updateCounter(activeIndex, totalSlides);
+        }
+    } else if (e.data.type === 'sync_slide') {
         const { globalIndex } = e.data;
         if (globalIndex !== undefined && window.showSlide) {
             window.showSlide(globalIndex);
@@ -137,15 +154,9 @@ window.addEventListener('message', (e) => {
     } else if (e.data.type === 'update_slide') {
         const { globalIndex, markdown } = e.data;
         if (globalIndex !== undefined) {
-            updateSingleSlide(globalIndex, markdown);
+            console.log('Update slide', globalIndex, markdown.substring(0,20)); updateSingleSlide(globalIndex, markdown);
         }
     } else if (e.data.type === 'update_all') {
-        // A simple way to reload everything without network request is to just 
-        // inject the new markdown into the first slide and reload Reveal?
-        // Actually, updating the whole DOM tree dynamically is complex for Reveal.js.
-        // Let's just reload the iframe. The editor now autosaves to journal,
-        // but wait... if we reload, the server sends the OLD file from disk.
-        // We must update the preview endpoint to include the journal!
         window.location.reload();
     } else if (e.data.type === 'toggle_tool') {
         toggleTool(e.data.tool, e.data.active);
@@ -224,37 +235,15 @@ function updateSingleSlide(globalIndex, rawMd) {
     const slideDiv = document.querySelectorAll('.slide')[globalIndex];
     if (!slideDiv) return;
 
-    // Process markdown exactly as the engine does
-    let md = window.SlideAddons ? window.SlideAddons.preProcess(rawMd) : rawMd;
-    const parsedHtml = window.marked.parse(md);
-    
-    // We keep the wrapper div
-    slideDiv.innerHTML = `<div style="position: relative; width: 100%; height: 100%; display: flow-root;">${parsedHtml}</div>`;
-    
-    // Render addons
-    if (window.SlideAddons) {
-        window.SlideAddons.renderAll();
-    }
-    
-    // Trigger MathJax typeset for the updated slide only
-    if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
-        MathJax.typesetPromise([slideDiv]).catch(err => console.error("MathJax error:", err));
-    }
-    
-    // Trigger Highlight.js
-    if (window.hljs) {
-        slideDiv.querySelectorAll('pre code').forEach((block) => {
-            hljs.highlightElement(block);
-        });
-    }
-    
-    // Make sure we're showing this slide
-    if (window.showSlide) {
-        window.showSlide(globalIndex);
-    }
-    
-    // Ensure scaling is applied correctly
-    if (window.updateSlideScale) {
-        window.updateSlideScale();
-    }
+    import('../../js/single-slide-renderer.js').then(renderer => {
+        renderer.updateSlideDOM(slideDiv, rawMd, { addons: window.SlideAddons });
+        
+        if (window.showSlide) {
+            window.showSlide(globalIndex);
+        }
+        
+        if (window.updateSlideScale) {
+            window.updateSlideScale();
+        }
+    }).catch(err => console.error("Failed to load slide renderer", err));
 }

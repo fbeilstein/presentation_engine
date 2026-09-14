@@ -165,16 +165,14 @@ body, html {
     background-color: var(--accent-color);
 }
 
-.CodeMirror {
+.cm-editor {
     height: 100% !important;
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 14px;
-    background-color: var(--bg-color) !important;
-    color: #d4d4d4 !important;
 }
 
-.CodeMirror-cursor {
-    border-left: 2px solid #fff !important;
+.cm-cursor, .cm-dropCursor {
+    border-left-color: #fff !important;
 }
 
 .include-stripes {

@@ -8,6 +8,7 @@ import './addons/static-timeline.js?v=2';
 import './addons/static-diagram.js?v=2';
 import './addons/titlepage-parser.js?v=1';
 import './addons/geometry-parser.js?v=1';
+import { resolveIncludes, splitIntoSlides } from './include-parser.js';
 
 // --- Global API for HTML onclick handlers ---
 window.toggleTheme = toggleTheme;
@@ -113,7 +114,13 @@ async function loadDependencies() {
 
     if (!window.MathJax) {
         window.MathJax = {
-            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']], processEscapes: true },
+            loader: { load: ['[tex]/color', '[tex]/boldsymbol', '[tex]/bbox'] },
+            tex: { 
+                packages: {'[+]': ['color', 'boldsymbol', 'bbox']},
+                inlineMath: [['$', '$'], ['\\(', '\\)']], 
+                displayMath: [['$$', '$$'], ['\\[', '\\]']], 
+                processEscapes: true 
+            },
             svg: { fontCache: 'global' },
             startup: { typeset: false } // We will trigger it manually
         };
@@ -175,16 +182,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         mainFile = mainFile.replace(/^\//, '');
 
-        // Recursively resolve any !include() statements inside the Markdown
-        const finalMarkdown = await resolveIncludesInString(basePath, rawMarkdown, new Set(), [mainFile]);
+        const readFile = async (path) => {
+            if (path === mainFile && rawMarkdown) return rawMarkdown; // root file is already fetched
+            const fullUrl = '/' + path;
+            const response = await fetch(fullUrl, { cache: 'no-cache' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.text();
+        };
 
-        parseAndInjectSlides(finalMarkdown);
+        const result = await resolveIncludes(mainFile, readFile, { 
+            injectSourceMarkers: true, 
+            treatIncludeAsBreak: false,
+            isRawMarkdown: true
+        });
+
+        parseAndInjectSlides(result.text);
 
         if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
-            MathJax.typesetPromise().catch(err => console.error("MathJax error:", err));
+            await MathJax.typesetPromise().catch(err => console.error("MathJax error:", err));
         }
 
         setupKeyboardNav();
+        window.dispatchEvent(new Event('engine_ready'));
 
     } catch (e) {
         const container = document.getElementById('presentation-container');
@@ -201,61 +220,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-/**
- * Recursively parses markdown string for !include(filename.md) and fetches them.
- */
-async function resolveIncludesInString(basePath, markdownStr, visited = new Set(), includeStack = []) {
-    const lines = markdownStr.split('\n');
-    const resolvedLines = [];
-
-    for (const line of lines) {
-        const includeMatch = line.match(/^\s*!include\((.+)\)\s*$/);
-        if (includeMatch) {
-            const includeFile = includeMatch[1].trim();
-            const fullUrl = basePath ? `${basePath}/${includeFile}` : includeFile;
-            
-            if (visited.has(fullUrl)) {
-                resolvedLines.push(`\n> **Error**: Circular inclusion detected for \`${fullUrl}\`\n`);
-                continue;
-            }
-            visited.add(fullUrl);
-
-            try {
-                const response = await fetch(fullUrl, { cache: 'no-cache' });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                let content = await response.text();
-                
-                const newStack = [...includeStack, fullUrl];
-                const stackStr = newStack.join('|');
-                
-                // Editor tracking: inject marker at the start of every slide in this file
-                if (window.isEditorPreview) {
-                    let localIndex = 0;
-                    content = `\n<!-- SOURCE: ${stackStr}:${localIndex++} -->\n` + content.replace(/^---$/gm, () => `\n---\n<!-- SOURCE: ${stackStr}:${localIndex++} -->\n`);
-                }
-                
-                const newBasePath = fullUrl.substring(0, fullUrl.lastIndexOf('/'));
-                const includedContent = await resolveIncludesInString(newBasePath, content, visited, newStack);
-                resolvedLines.push(includedContent);
-            } catch (e) {
-                resolvedLines.push(`\n> **Error** including \`${fullUrl}\`: ${e.message}\n`);
-            }
-        } else {
-            resolvedLines.push(line);
-        }
-    }
-    return resolvedLines.join('\n');
-}
-
-/**
- * Splits raw markdown into individual slides and renders them to HTML via Marked.js
- */
 function parseAndInjectSlides(markdownContent) {
-    const rawSlides = markdownContent.split(SLIDE_SEPARATOR);
+    const rawSlides = splitIntoSlides(markdownContent);
     const container = document.getElementById('presentation-container');
     container.innerHTML = ''; // Clear exactly
 
-    rawSlides.forEach((rawMd, index) => {
+    rawSlides.forEach((slideObj, index) => {
+        let rawMd = slideObj.content;
         const slideDiv = document.createElement('div');
         slideDiv.className = 'slide';
         if (index === 0) slideDiv.classList.add('active'); // First slide visible
@@ -320,12 +291,13 @@ function prevSlide() {
     showSlide(currentSlideIndex - 1);
 }
 
-function updateCounter() {
+function updateCounter(index = currentSlideIndex, total = slides.length) {
     const counter = document.getElementById('slide-counter');
-    if (counter && slides.length > 0) {
-        counter.textContent = `${currentSlideIndex + 1} / ${slides.length}`;
+    if (counter && total > 0) {
+        counter.textContent = `${index + 1} / ${total}`;
     }
 }
+window.updateCounter = updateCounter;
 
 /**
  * Global Keyboard Listeners for Presentation Flow
@@ -467,7 +439,8 @@ window.addEventListener('message', (event) => {
  * Expand/Fullscreen slide toggle
  */
 function toggleExpand() {
-    slides.forEach(slide => slide.classList.toggle('expanded'));
+    const currentSlides = document.querySelectorAll('.slide');
+    currentSlides.forEach(slide => slide.classList.toggle('expanded'));
     updateSlideScale();
 }
 
@@ -475,8 +448,9 @@ function toggleExpand() {
  * Responsive Scaling (Fixed Layout Resolution)
  */
 function updateSlideScale() {
-    if (!slides || !slides.length) return;
-    const isExpanded = slides[0].classList.contains('expanded');
+    const currentSlides = document.querySelectorAll('.slide');
+    if (!currentSlides || !currentSlides.length) return;
+    const isExpanded = currentSlides[0].classList.contains('expanded');
     
     // Fixed base resolution
     const baseWidth = 1600;
@@ -508,7 +482,7 @@ function updateSlideScale() {
     const topOffset = (window.innerHeight - visualHeight) / 2;
     
     // Apply explicitly via JS (bypassing any CSS layout quirks)
-    slides.forEach(slide => {
+    currentSlides.forEach(slide => {
         slide.style.position = 'absolute';
         slide.style.left = leftOffset + 'px';
         slide.style.top = topOffset + 'px';

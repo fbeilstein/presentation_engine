@@ -6,17 +6,25 @@
     <title>Antigravity Slide Editor</title>
     <link rel="stylesheet" href="css/editor.css">
     
-    <!-- CodeMirror 5 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-    
-    <!-- CodeMirror Markdown mode -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
-
-    <!-- CodeMirror Folding -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+    <!-- CodeMirror 6 Import Map -->
+    <script type="importmap">
+    {
+        "imports": {
+            "@codemirror/state": "https://esm.sh/@codemirror/state",
+            "@codemirror/view": "https://esm.sh/@codemirror/view",
+            "@codemirror/language": "https://esm.sh/@codemirror/language",
+            "@codemirror/commands": "https://esm.sh/@codemirror/commands",
+            "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown",
+            "@codemirror/language-data": "https://esm.sh/@codemirror/language-data",
+            "@codemirror/search": "https://esm.sh/@codemirror/search",
+            "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete",
+            "@codemirror/lint": "https://esm.sh/@codemirror/lint",
+            "@lezer/highlight": "https://esm.sh/@lezer/highlight",
+            "@codemirror/history": "https://esm.sh/@codemirror/history",
+            "@codemirror/theme-one-dark": "https://esm.sh/@codemirror/theme-one-dark"
+        }
+    }
+    </script>
 
     <!-- App Scripts -->
     <script type="module" src="js/app.js" defer></script>
@@ -55,7 +63,7 @@
             <div class="split-pane">
                 <!-- CodeMirror Container -->
                 <div id="editor-container" class="pane editor-pane" style="flex: 1;">
-                    <textarea id="markdown-editor" style="display: none;"></textarea>
+                    <div id="cm-editor" style="flex: 1; height: 100%; overflow: hidden;"></div>
                 </div>
                 
                 <!-- Resizer -->

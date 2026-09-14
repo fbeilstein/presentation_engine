@@ -1,8 +1,11 @@
-import { editorView, currentFilePath, loadFileFromServer, currentDocumentModel } from './editor.js';
-import { handleEditorChange } from './document-differ.js';
+import { ViewPlugin } from '@codemirror/view';
+import { editorView, currentFilePath, currentDocumentModel } from './editor.js';
 import { promptNewFile } from './file-prompt.js';
+import { outlineField } from './outline-ast.js';
+import { syncAnnotation } from './sync-filter.js';
+import { expandRegionAnnotation, regionMapField } from './region-map.js';
 
-export let globalSlideMapping = [];
+export let globalSlideMapping = []; // keep for compatibility if needed, but we should use outlineField
 let selectedSlides = new Set();
 let lastSelectedIndex = -1;
 
@@ -57,32 +60,34 @@ function normalizePath(p) {
     return res.join('/');
 }
 
-export function renderGlobalOutline(slides) {
-    globalSlideMapping = slides.map(slide => {
-        slide.file = normalizePath(slide.file);
-        if (slide.fileStack) {
-            slide.fileStack = slide.fileStack.map(normalizePath);
+export const outlineRendererPlugin = ViewPlugin.fromClass(class {
+    constructor(view) {
+        this.render(view);
+    }
+    update(update) {
+        if (update.docChanged || update.state.field(outlineField, false) !== update.startState.field(outlineField, false)) {
+            this.render(update.view);
         }
-        return slide;
-    });
+    }
+    render(view) {
+        const slides = view.state.field(outlineField, false);
+        if (!slides) return;
+        globalSlideMapping = slides;
+        renderGlobalOutlineDOM(slides);
+    }
+});
+
+export function renderGlobalOutlineDOM(slides) {
     const container = document.getElementById('slide-outline');
+    if (!container) return;
+    
     container.innerHTML = '';
     
-    // Pre-calculate which files have non-empty slides
-    const fileHasNonEmpty = new Set();
-    slides.forEach(slide => {
-        if (!slide.isEmpty) {
-            const stack = slide.fileStack || [slide.file];
-            stack.forEach(f => fileHasNonEmpty.add(f));
-        }
-    });
-    
-    let currentStack = []; // array of { file, domElement }
+    let currentStack = []; 
     
     slides.forEach((slide, index) => {
         const stack = slide.fileStack || [slide.file];
         
-        // Find where the new stack diverges from currentStack
         let divergeIndex = 0;
         while (divergeIndex < currentStack.length && 
                divergeIndex < stack.length && 
@@ -90,12 +95,10 @@ export function renderGlobalOutline(slides) {
             divergeIndex++;
         }
         
-        // Pop the diverging parts
         while (currentStack.length > divergeIndex) {
             currentStack.pop();
         }
         
-        // Push the new parts
         for (let i = divergeIndex; i < stack.length; i++) {
             const file = stack[i];
             const color = getFileColor(file);
@@ -103,7 +106,6 @@ export function renderGlobalOutline(slides) {
             const groupEl = document.createElement('div');
             groupEl.className = 'outline-file-group';
             groupEl.style.borderLeftColor = color;
-            // Indent child groups
             if (i > 0) {
                 groupEl.style.marginLeft = '4px';
             }
@@ -115,12 +117,6 @@ export function renderGlobalOutline(slides) {
             let basename = file;
             if (file.includes('/')) basename = file.split('/').pop();
             badge.textContent = basename;
-            
-            if (!fileHasNonEmpty.has(file)) {
-                badge.classList.add('empty-file');
-                badge.title = 'Empty File (Click to remove)';
-                badge.onclick = () => removeEmptyFile(file);
-            }
             
             groupEl.appendChild(badge);
             groupEl.addEventListener('dragover', (e) => {
@@ -138,41 +134,36 @@ export function renderGlobalOutline(slides) {
                 handleDrop(e, -1, file);
             });
             
-            // Append to parent
             const parentEl = currentStack.length > 0 ? currentStack[currentStack.length - 1].domElement : container;
             parentEl.appendChild(groupEl);
             
             currentStack.push({ file, domElement: groupEl });
         }
         
-        // Now append the slide item to the deepest group
-        if (!slide.isEmpty) {
-            const groupEl = currentStack[currentStack.length - 1].domElement;
-            const el = document.createElement('div');
-            el.className = 'outline-item';
-            el.dataset.globalIndex = index;
-            el.textContent = `${index + 1}. ${slide.title}`;
-            el.title = slide.title;
-            el.draggable = true;
-            
-            el.addEventListener('click', (e) => handleItemClick(e, index));
-            el.addEventListener('contextmenu', (e) => handleContextMenu(e, index));
-            
-            // Drag and Drop
-            el.addEventListener('dragstart', (e) => handleDragStart(e, index));
-            el.addEventListener('dragover', (e) => handleDragOver(e));
-            el.addEventListener('dragleave', (e) => handleDragLeave(e));
-            el.addEventListener('drop', (e) => {
-                e.stopPropagation();
-                handleDrop(e, index);
-            });
-            
-            if (selectedSlides.has(index)) {
-                el.classList.add('selected');
-            }
-            
-            groupEl.appendChild(el);
+        const groupEl = currentStack[currentStack.length - 1].domElement;
+        const el = document.createElement('div');
+        el.className = 'outline-item';
+        el.dataset.globalIndex = index;
+        el.textContent = `${index + 1}. ${slide.title}`;
+        el.title = slide.title;
+        el.draggable = true;
+        
+        el.addEventListener('click', (e) => handleItemClick(e, index));
+        el.addEventListener('contextmenu', (e) => handleContextMenu(e, index));
+        
+        el.addEventListener('dragstart', (e) => handleDragStart(e, index));
+        el.addEventListener('dragover', (e) => handleDragOver(e));
+        el.addEventListener('dragleave', (e) => handleDragLeave(e));
+        el.addEventListener('drop', (e) => {
+            e.stopPropagation();
+            handleDrop(e, index);
+        });
+        
+        if (selectedSlides.has(index)) {
+            el.classList.add('selected');
         }
+        
+        groupEl.appendChild(el);
     });
 }
 
@@ -196,30 +187,17 @@ function handleItemClick(e, index) {
 }
 
 async function jumpToSlide(globalIndex) {
-    const slide = globalSlideMapping[globalIndex];
+    const outline = editorView.state.field(outlineField);
+    const slide = outline[globalIndex];
     if (!slide) return;
     
-    const content = editorView.getValue();
-    const chunks = content.split(/^---$/gm);
-    
-    if (globalIndex >= chunks.length) {
-        globalIndex = chunks.length - 1;
-    }
-    
-    const prefix = chunks.slice(0, globalIndex).join("---") + (globalIndex > 0 ? "---" : "");
-    const newlines = prefix.split('\n').length - 1;
-    const line = newlines + (globalIndex > 0 ? 1 : 0);
-    
-    editorView.setCursor({line: line, ch: 0});
-    editorView.focus();
-    
-    const t = editorView.charCoords({line: line, ch: 0}, "local").top; 
-    editorView.scrollTo(null, t - 40);
+    editorView.dispatch({
+        selection: { anchor: slide.from },
+        scrollIntoView: true
+    });
 }
 
-// --- Context Menu ---
 let currentMenu = null;
-
 function hideContextMenu() {
     if (currentMenu) {
         currentMenu.remove();
@@ -275,91 +253,55 @@ function handleContextMenu(e, index) {
     currentMenu = menu;
 }
 
-// --- Operations API ---
-
-function updateFileInModel(file, newContent) {
-    if (currentDocumentModel && currentDocumentModel.fileCache[file] !== undefined) {
-        currentDocumentModel.fileCache[file] = newContent;
-        currentDocumentModel.rebuildTree();
-        handleEditorChange(editorView);
-    }
-}
-
-async function removeEmptyFile(file) {
-    if (confirm(`Remove empty file include for ${file}?`)) {
-        // Find where this file is included by searching current file or main?
-        // Let's assume it's in the current file.
-        let content = currentDocumentModel.fileCache[currentFilePath];
-        const regex = new RegExp(`^\\s*!include\\(${file}\\)\\s*$`, 'gm');
-        if (regex.test(content)) {
-            content = content.replace(regex, '');
-            updateFileInModel(currentFilePath, content);
-        } else {
-            alert("Could not find the include directive in the current file. Please remove it manually.");
-        }
-    }
-}
-
 async function addSlideBelow(globalIndex) {
-    const slide = globalSlideMapping[globalIndex];
-    if (!slide || slide.file === 'unknown') return;
+    const outline = editorView.state.field(outlineField);
+    const slide = outline[globalIndex];
+    if (!slide) return;
     
-    let content = currentDocumentModel.fileCache[slide.file];
-    
-    const chunks = content.split(/^---$/gm);
-    // Insert new slide after slide.localIndex
-    chunks.splice(slide.localIndex + 1, 0, '\n\nNew Slide\n\n');
-    const newContent = chunks.join('---');
-    
-    updateFileInModel(slide.file, newContent);
+    editorView.dispatch({
+        changes: { from: slide.to, insert: '\n---\n\nNew Slide\n\n' }
+    });
 }
 
 async function deleteSelectedSlides() {
     if (!confirm(`Delete ${selectedSlides.size} slide(s)?`)) return;
     
-    // Group selected slides by file
-    const toDelete = {};
+    const outline = editorView.state.field(outlineField);
+    const changes = [];
+    
     for (let idx of selectedSlides) {
-        const slide = globalSlideMapping[idx];
-        if (slide && slide.file !== 'unknown') {
-            if (!toDelete[slide.file]) toDelete[slide.file] = [];
-            toDelete[slide.file].push(slide.localIndex);
+        const slide = outline[idx];
+        if (slide) {
+            changes.push({ from: slide.from, to: slide.to }); // Delete slide content
+            // Also try to delete trailing or leading separator if possible, but simplest is just content
+            // Actually, if we delete from: slide.from to: slide.to, the --- might be left behind.
+            // Let's delete up to the next slide.
+            const nextSlide = outline[idx + 1];
+            if (nextSlide && nextSlide.file === slide.file) {
+                changes.push({ from: slide.to, to: nextSlide.from });
+            }
         }
     }
     
-    for (const [file, localIndexes] of Object.entries(toDelete)) {
-        localIndexes.sort((a,b) => b - a); // Sort descending to splice safely
-        
-        let content = currentDocumentModel.fileCache[file];
-        const chunks = content.split(/^---$/gm);
-        
-        for (let i of localIndexes) {
-            chunks.splice(i, 1);
-        }
-        
-        const newContent = chunks.join('---');
-        updateFileInModel(file, newContent);
-    }
-    
+    editorView.dispatch({ changes });
     selectedSlides.clear();
 }
 
 async function extractToNewFile() {
     if (selectedSlides.size === 0) return;
     
-    // Ensure all selected slides are contiguous and from the CURRENT file
+    const outline = editorView.state.field(outlineField);
     const sortedIdx = Array.from(selectedSlides).sort((a,b) => a-b);
     const firstIdx = sortedIdx[0];
-    const firstSlide = globalSlideMapping[firstIdx];
+    const firstSlide = outline[firstIdx];
     
     if (firstSlide.file !== currentFilePath) {
         alert("You can only extract slides from the currently open file.");
         return;
     }
     
-    // Check contiguous
     for (let i = 0; i < sortedIdx.length; i++) {
-        const slide = globalSlideMapping[sortedIdx[i]];
+        const slide = outline[sortedIdx[i]];
         if (slide.file !== currentFilePath || slide.localIndex !== firstSlide.localIndex + i) {
             alert("Please select a continuous block of slides from the current file.");
             return;
@@ -370,18 +312,19 @@ async function extractToNewFile() {
     const newFilename = await promptNewFile("Enter new filename", "section.md", basePath);
     if (!newFilename) return;
     
-    const content = currentDocumentModel.fileCache[currentFilePath];
-    const chunks = content.split(/^---$/gm);
+    const lastSlide = outline[sortedIdx[sortedIdx.length - 1]];
     
-    const extractedChunks = chunks.splice(firstSlide.localIndex, sortedIdx.length, `\n\n!include(${newFilename})\n\n`);
-    const extractedMarkdown = extractedChunks.join('---');
+    const extractedText = editorView.state.doc.sliceString(firstSlide.from, lastSlide.to);
     
-    // Save new file
     const fullNewPath = basePath ? `${basePath}/${newFilename}` : newFilename;
-    currentDocumentModel.fileCache[fullNewPath] = extractedMarkdown;
+    currentDocumentModel.fileCache[fullNewPath] = extractedText;
     
-    // Update current file
-    updateFileInModel(currentFilePath, chunks.join('---'));
+    const includeDirective = `\n!include(${newFilename})\n`;
+    
+    editorView.dispatch({
+        changes: { from: firstSlide.from, to: lastSlide.to, insert: includeDirective }
+    });
+    
     selectedSlides.clear();
 }
 
@@ -390,19 +333,15 @@ async function createEmptyFileInclude() {
     const newFilename = await promptNewFile("Enter new filename", "section.md", basePath);
     if (!newFilename) return;
     
-    // Create empty file in cache BEFORE modifying document so it doesn't trigger a fetch
     const fullNewPath = basePath ? `${basePath}/${newFilename}` : newFilename;
     currentDocumentModel.fileCache[fullNewPath] = "";
 
-    // Insert !include at cursor
-    const includeStr = `\n---\n!include(${newFilename})\n---\n`;
-    const doc = editorView.getDoc();
-    const cursor = doc.getCursor();
-    doc.replaceRange(includeStr, cursor);
+    const includeStr = `\n!include(${newFilename})\n`;
+    const cursor = editorView.state.selection.main.head;
+    editorView.dispatch({
+        changes: { from: cursor, insert: includeStr }
+    });
 }
-
-// --- Drag & Drop ---
-let dragStartIndex = -1;
 
 function handleDragStart(e, index) {
     if (!selectedSlides.has(index)) {
@@ -411,7 +350,6 @@ function handleDragStart(e, index) {
         lastSelectedIndex = index;
         updateSelectionVisuals();
     }
-    dragStartIndex = index;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', 'slide-drag');
 }
@@ -445,18 +383,6 @@ function handleDragLeave(e) {
     }
 }
 
-function extractMarkdown(content, filename) {
-    const isHtml = filename && filename.toLowerCase().endsWith('.html');
-    if (!isHtml) {
-        return { before: "", md: content, after: "" };
-    }
-    const match = content.match(/([\s\S]*?<script type="text\/markdown"[^>]*>)([\s\S]*?)(<\/script>[\s\S]*)/i);
-    if (match) {
-        return { before: match[1], md: match[2], after: match[3] };
-    }
-    return { before: "", md: content, after: "" };
-}
-
 async function handleDrop(e, targetGlobalIndex, fallbackTargetFile = null) {
     e.preventDefault();
     
@@ -476,134 +402,95 @@ async function handleDrop(e, targetGlobalIndex, fallbackTargetFile = null) {
         el.classList.remove('drag-over');
     });
     
-    if (selectedSlides.has(targetGlobalIndex)) return; // Dropped on itself
+    if (selectedSlides.has(targetGlobalIndex)) return; 
     
+    const outline = editorView.state.field(outlineField);
     const sortedIdx = Array.from(selectedSlides).sort((a,b) => a-b);
     
-    // Perform slide rearrangement purely via CodeMirror edits to preserve undo stack
-    const doc = editorView.getDoc();
+    // We will extract text, and dispatch a single CM6 transaction to move it.
+    // Sync filter will handle propagating this to other instances if needed!
+    const sourceTexts = sortedIdx.map(idx => {
+        const slide = outline[idx];
+        return editorView.state.doc.sliceString(slide.from, slide.to);
+    });
     
-    // Helper to find the line range of a global slide index
-    const getSlideLineRange = (globalIndex) => {
-        const fullText = doc.getValue();
-        const hasScript = fullText.includes('<script type="text/markdown"');
-        let inMarkdown = !hasScript;
+    const deletions = sortedIdx.map(idx => {
+        const slide = outline[idx];
+        let delFrom = slide.from;
+        let delTo = slide.to;
         
-        let currentSlide = 0;
-        let startLine = -1;
-        const totalLines = doc.lineCount();
+        if (!slide.isImplicitBreak) {
+            const textAfter = editorView.state.doc.sliceString(slide.to, Math.min(slide.to + 10, editorView.state.doc.length));
+            const match = textAfter.match(/^\r?\n\s*---\s*\r?\n/);
+            if (match) delTo += match[0].length;
+            else {
+                const match2 = textAfter.match(/^\s*---\s*\r?\n/);
+                if (match2) delTo += match2[0].length;
+            }
+        } else {
+            const textBefore = editorView.state.doc.sliceString(Math.max(0, slide.from - 10), slide.from);
+            const match = textBefore.match(/\r?\n\s*---\s*\r?\n$/);
+            if (match) delFrom -= match[0].length;
+            else {
+                const match2 = textBefore.match(/\r?\n\s*---\s*$/);
+                if (match2) delFrom -= match2[0].length;
+            }
+        }
         
-        for (let i = 0; i < totalLines; i++) {
-            const text = doc.getLine(i);
-            
-            // Handle script wrappers
-            if (hasScript && text.includes('<script type="text/markdown"')) {
-                inMarkdown = true;
-                startLine = i + 1;
-                continue;
-            }
-            if (hasScript && text.includes('</script>') && inMarkdown) {
-                if (currentSlide === globalIndex) return { start: startLine, end: i - 1 };
-                inMarkdown = false;
-            }
-            
-            if (!inMarkdown) {
-                if (startLine === -1 && i === 0) startLine = 0; // Fallback
+        return { from: delFrom, to: delTo };
+    });
+    
+    // Sort and merge deletions to avoid overlapping ranges
+    deletions.sort((a, b) => a.from - b.from);
+    const mergedDeletions = [];
+    for (const d of deletions) {
+        if (mergedDeletions.length === 0) {
+            mergedDeletions.push(d);
+        } else {
+            const last = mergedDeletions[mergedDeletions.length - 1];
+            if (d.from <= last.to) {
+                last.to = Math.max(last.to, d.to);
             } else {
-                if (text.trim() === '---') {
-                    if (currentSlide === globalIndex) {
-                        return { start: startLine, end: i - 1 };
-                    }
-                    currentSlide++;
-                    startLine = i + 1;
-                }
+                mergedDeletions.push(d);
             }
-        }
-        
-        if (currentSlide === globalIndex) {
-            return { start: startLine, end: totalLines - 1 };
-        }
-        return null;
-    };
-    
-    // Process without .operation() so that editor.js handles each edit sequentially,
-    // firing changes -> applyChange -> rebuildTree -> flatLines rebuild in exactly the right order!
-    const extractedTexts = [];
-    for (let i = sortedIdx.length - 1; i >= 0; i--) {
-        const idx = sortedIdx[i];
-        const range = getSlideLineRange(idx);
-        if (!range) continue;
-        
-        const text = doc.getRange({line: range.start, ch: 0}, {line: range.end, ch: doc.getLine(range.end).length});
-        extractedTexts.unshift(text);
-        
-        // Delete the slide AND its trailing/leading separator, BUT ONLY if the separator is in the SAME file!
-        const startNode = currentDocumentModel ? currentDocumentModel.flatLines[range.start] : null;
-        const endNode = currentDocumentModel ? currentDocumentModel.flatLines[range.end] : null;
-        
-        let deleted = false;
-        
-        if (range.end + 1 < doc.lineCount() && doc.getLine(range.end + 1).trim() === '---') {
-            const sepNode = currentDocumentModel ? currentDocumentModel.flatLines[range.end + 1] : null;
-            if (!sepNode || (endNode && sepNode.node.file === endNode.node.file)) {
-                doc.replaceRange("", {line: range.start, ch: 0}, {line: range.end + 2, ch: 0}, "*drag");
-                deleted = true;
-            }
-        } 
-        
-        if (!deleted && range.start > 0 && doc.getLine(range.start - 1).trim() === '---') {
-            const sepNode = currentDocumentModel ? currentDocumentModel.flatLines[range.start - 1] : null;
-            if (!sepNode || (startNode && sepNode.node.file === startNode.node.file)) {
-                doc.replaceRange("", {line: range.start - 1, ch: 0}, {line: range.end, ch: doc.getLine(range.end).length}, "*drag");
-                deleted = true;
-            }
-        }
-        
-        if (!deleted) {
-            doc.replaceRange("", {line: range.start, ch: 0}, {line: range.end, ch: doc.getLine(range.end).length}, "*drag");
         }
     }
-        
-    // Find target insertion point
-    // Note: targetGlobalIndex might have shifted due to deletions!
-    // We recalculate target global index position.
-    let shift = 0;
-    for (let idx of sortedIdx) {
-        if (idx < targetGlobalIndex) shift++;
-    }
-    let adjustedTargetIndex = targetGlobalIndex - shift;
-    if (insertAfter) adjustedTargetIndex++;
     
-    let targetRange = getSlideLineRange(adjustedTargetIndex);
-    let insertPos = {line: 0, ch: 0};
-    let insertPrefix = "";
-    let insertSuffix = "";
-    
-    if (targetRange) {
-        insertPos = {line: targetRange.start, ch: 0};
-        insertSuffix = "\n---\n";
+    let targetPos = 0;
+    let targetSlide = null;
+    if (targetGlobalIndex !== -1) {
+        targetSlide = outline[targetGlobalIndex];
+        if (targetSlide) {
+            targetPos = insertAfter ? targetSlide.to : targetSlide.from;
+        }
     } else {
-        // Append at the very end of the markdown block
-        targetRange = getSlideLineRange(adjustedTargetIndex - 1);
-        if (targetRange) {
-            insertPos = {line: targetRange.end, ch: doc.getLine(targetRange.end).length};
-            insertPrefix = "\n---\n";
+        const map = editorView.state.field(regionMapField, false);
+        const region = map && map.regions ? map.regions.find(r => r.file === fallbackTargetFile && r.type === 'expanded-include') : null;
+        if (region) {
+            targetPos = region.to;
+        } else {
+            targetPos = editorView.state.doc.length;
         }
     }
     
-    const finalInsertText = insertPrefix + extractedTexts.join("\n---\n") + insertSuffix;
-    doc.replaceRange(finalInsertText, insertPos, insertPos, "*drag");
+    let combinedInsertText = "";
+    if (insertAfter) {
+        combinedInsertText = "\n---\n" + sourceTexts.join("\n---\n");
+    } else {
+        combinedInsertText = sourceTexts.join("\n---\n") + "\n---\n";
+    }
+    
+    editorView.dispatch({
+        changes: [
+            ...mergedDeletions.map(d => ({ from: d.from, to: d.to, insert: "" })),
+            { from: targetPos, insert: combinedInsertText }
+        ],
+        annotations: [
+            syncAnnotation.of(true),
+            expandRegionAnnotation.of(targetSlide ? targetSlide.file : fallbackTargetFile)
+        ]
+    });
     
     selectedSlides.clear();
-    
-    // Force preview reload to rebuild slide mapping and update outline
-    // Wait for the debounced journal save to complete (500ms delay in document-differ.js)
-    const iframe = document.getElementById('preview-iframe');
-    if (iframe) {
-        const reloadOnSave = () => {
-            iframe.contentWindow.location.reload();
-            window.removeEventListener('editor-content-changed', reloadOnSave);
-        };
-        window.addEventListener('editor-content-changed', reloadOnSave);
-    }
+    lastSelectedIndex = -1;
 }

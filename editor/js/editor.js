@@ -1,4 +1,4 @@
-import { EditorState, StateEffect } from '@codemirror/state';
+import { EditorState, StateEffect, Transaction } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, gutter, GutterMarker, drawSelection, highlightActiveLineGutter, highlightActiveLine, crosshairCursor } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
@@ -121,63 +121,67 @@ const stripeGutter = gutter({
     }
 });
 
+let editorExtensions = [];
+
 export function initEditor() {
     const cmEditor = document.getElementById('cm-editor');
     
+    editorExtensions = [
+        lineNumbers(),
+        foldGutter(),
+        highlightActiveLineGutter(),
+        drawSelection(),
+        crosshairCursor(),
+        EditorView.lineWrapping,
+        highlightActiveLine(),
+        oneDark,
+        stripeGutter,
+        history(),
+        markdown(),
+        keymap.of([
+            ...defaultKeymap, 
+            ...historyKeymap,
+            ...foldKeymap,
+            { key: "Mod-s", run: () => { saveDocumentToDisk(editorView); return true; } }
+        ]),
+        regionMapField,
+        syncFilter,
+        endBoundaryDecorations,
+        structuralDetector,
+        outlineField,
+        outlineRendererPlugin,
+        EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+                if (currentDocumentModel) {
+                    const map = update.state.field(regionMapField);
+                    currentDocumentModel.applyChangesToCache(map, update.changes, update.state.doc);
+                }
+                handleEditorChange(editorView);
+                pushCurrentSlide(false);
+            }
+            if (update.selectionSet) {
+                pushCurrentSlide(true);
+            }
+        }),
+        EditorView.domEventHandlers({
+            paste: (e, view) => {
+                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                for (let item of items) {
+                    if (item.type.indexOf("image") === 0) {
+                        e.preventDefault();
+                        const blob = item.getAsFile();
+                        showPasteModal(blob);
+                        return true;
+                    }
+                }
+                return false;
+            }
+        })
+    ];
+    
     const state = EditorState.create({
         doc: "",
-        extensions: [
-            lineNumbers(),
-            foldGutter(),
-            highlightActiveLineGutter(),
-            drawSelection(),
-            crosshairCursor(),
-            EditorView.lineWrapping,
-            highlightActiveLine(),
-            oneDark,
-            stripeGutter,
-            history(),
-            markdown(),
-            keymap.of([
-                ...defaultKeymap, 
-                ...historyKeymap,
-                ...foldKeymap,
-                { key: "Mod-s", run: () => { saveDocumentToDisk(editorView); return true; } }
-            ]),
-            regionMapField,
-            syncFilter,
-            endBoundaryDecorations,
-            structuralDetector,
-            outlineField,
-            outlineRendererPlugin,
-            EditorView.updateListener.of((update) => {
-                if (update.docChanged) {
-                    if (currentDocumentModel) {
-                        const map = update.state.field(regionMapField);
-                        currentDocumentModel.applyChangesToCache(map, update.changes, update.state.doc);
-                    }
-                    handleEditorChange(editorView);
-                    pushCurrentSlide(false);
-                }
-                if (update.selectionSet) {
-                    pushCurrentSlide(true);
-                }
-            }),
-            EditorView.domEventHandlers({
-                paste: (e, view) => {
-                    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-                    for (let item of items) {
-                        if (item.type.indexOf("image") === 0) {
-                            e.preventDefault();
-                            const blob = item.getAsFile();
-                            showPasteModal(blob);
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-            })
-        ]
+        extensions: editorExtensions
     });
     
     editorView = new EditorView({
@@ -192,9 +196,11 @@ export function loadFile(path, content) {
     currentFilePath = path;
     lastKnownSlideCount = (content.replace(/\r/g, '').match(/^---$/gm) || []).length;
     
-    editorView.dispatch({
-        changes: { from: 0, to: editorView.state.doc.length, insert: content }
-    });
+    editorView.setState(EditorState.create({
+        doc: content,
+        extensions: editorExtensions
+    }));
+    
     
     if (path.endsWith('.html')) {
         const iframe = document.getElementById('preview-iframe');
@@ -309,6 +315,20 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 saveBtn.innerHTML = originalText;
             }, 2000);
+        });
+    }
+
+    const clearJournalBtn = document.getElementById('clear-journal-btn');
+    if (clearJournalBtn) {
+        clearJournalBtn.addEventListener('click', async () => {
+            if (confirm("Are you sure you want to clear the journal cache? Any unsaved changes will be lost and the page will reload.")) {
+                try {
+                    await fetch('/api/clear-journal', { method: 'POST' });
+                    window.location.reload();
+                } catch (e) {
+                    alert("Failed to clear journal: " + e.message);
+                }
+            }
         });
     }
     

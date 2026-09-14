@@ -133,6 +133,16 @@ def save_journal(req: JournalRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/clear-journal")
+def clear_journal():
+    journal_path = WORKSPACE_ROOT / ".journal.json"
+    if journal_path.exists():
+        try:
+            journal_path.unlink()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    return {"ok": True}
+
 @app.post("/api/upload")
 async def upload_file(path: str = Form(...), file: UploadFile = File(...)):
     file_path = WORKSPACE_ROOT / path

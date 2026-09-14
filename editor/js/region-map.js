@@ -49,11 +49,16 @@ export function remapRegions(map, tr) {
                 expandTo = false;
             }
         } else {
-            if (r.type === 'markdown-content') {
+            if (r.type === 'expanded-include') {
                 fromAssoc = -1;
                 toAssoc = 1;
                 expandFrom = true;
                 expandTo = true;
+            } else {
+                fromAssoc = 1;
+                toAssoc = -1;
+                expandFrom = false;
+                expandTo = false;
             }
         }
         

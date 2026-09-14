@@ -1,6 +1,7 @@
 import { DocumentModel } from './document-model.js';
 import { setRegionMap } from './region-map.js';
 import { syncAnnotation } from './sync-filter.js';
+import { Transaction } from '@codemirror/state';
 
 let currentModel = null;
 let saveTimeout = null;
@@ -19,7 +20,10 @@ export async function initDocument(path, cmView) {
             cmView.dispatch({
                 changes: { from: 0, to: cmView.state.doc.length, insert: flatText },
                 effects: setRegionMap.of(map),
-                annotations: syncAnnotation.of(true)
+                annotations: [
+                    syncAnnotation.of(true),
+                    Transaction.addToHistory.of(false)
+                ]
             });
         } else {
             cmView.dispatch({

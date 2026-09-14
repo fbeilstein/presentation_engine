@@ -29,6 +29,7 @@ function findEditedRegion(regionMap, changes) {
 export const syncFilter = EditorState.transactionFilter.of((tr) => {
     // Guard: if this transaction was already produced by the sync filter, pass through
     if (tr.annotation(syncAnnotation)) return tr;
+    if (tr.isUserEvent('undo') || tr.isUserEvent('redo')) return tr;
     if (!tr.docChanged) return tr;
     
     const regionMap = tr.startState.field(regionMapField);

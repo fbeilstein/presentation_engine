@@ -180,7 +180,10 @@ export function buildFlatTextAndRegionMap(fileCache, rootFile) {
             const match = line.match(/^\s*!include\((.+)\)\s*$/);
             
             if (match) {
-                // First close the markdown-content region if there is one before this line
+                const childPath = resolveIncludePath(path, match[1]);
+                const childContent = fileCache[childPath];
+                if (childContent !== undefined && childContent !== null) {
+                    // Close the markdown-content region before the include
                     map.regions.push({
                         from: currentRegionStart,
                         to: currentOffset,
@@ -192,28 +195,25 @@ export function buildFlatTextAndRegionMap(fileCache, rootFile) {
                         localOffset: currentRegionLocalStart
                     });
                 
-                const lineText = line + (i < lines.length - 1 ? '\n' : '');
-                flatText += lineText;
-                
-                map.regions.push({
-                    from: currentOffset,
-                    to: currentOffset + lineText.length,
-                    file: path,
-                    fileStack: currentStack,
-                    type: 'include-directive',
-                    depth: depth,
-                    instanceIndex: instanceIndex,
-                    localOffset: currentLocalOffset
-                });
-                
-                currentOffset += lineText.length;
-                currentLocalOffset += lineText.length;
-                currentRegionStart = currentOffset; // Next markdown region starts here
-                currentRegionLocalStart = currentLocalOffset;
-                
-                const childPath = resolveIncludePath(path, match[1]);
-                const childContent = fileCache[childPath];
-                if (childContent !== undefined) {
+                    const lineText = line + (i < lines.length - 1 ? '\n' : '');
+                    flatText += lineText;
+                    
+                    map.regions.push({
+                        from: currentOffset,
+                        to: currentOffset + lineText.length,
+                        file: path,
+                        fileStack: currentStack,
+                        type: 'include-directive',
+                        depth: depth,
+                        instanceIndex: instanceIndex,
+                        localOffset: currentLocalOffset
+                    });
+                    
+                    currentOffset += lineText.length;
+                    currentLocalOffset += lineText.length;
+                    currentRegionStart = currentOffset; // Next markdown region starts here
+                    currentRegionLocalStart = currentLocalOffset;
+
                     const childNode = appendTree(childPath, childContent, depth + 1, currentStack);
                     node.children.push(childNode);
                     
@@ -225,6 +225,12 @@ export function buildFlatTextAndRegionMap(fileCache, rootFile) {
                     
                     currentRegionStart = currentOffset; // Any content after the include starts here
                     currentRegionLocalStart = currentLocalOffset;
+                } else {
+                    // If the file does not exist, treat the !include as plain text so the user can fix the typo
+                    const lineText = line + (i < lines.length - 1 ? '\n' : '');
+                    flatText += lineText;
+                    currentOffset += lineText.length;
+                    currentLocalOffset += lineText.length;
                 }
             } else {
                 const lineText = line + (i < lines.length - 1 ? '\n' : '');

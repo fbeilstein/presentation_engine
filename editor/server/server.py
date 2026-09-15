@@ -71,6 +71,11 @@ def build_tree(dir_path: Path):
 def get_fs_tree():
     return JSONResponse({"tree": build_tree(WORKSPACE_ROOT)})
 
+@app.get("/api/exists")
+def check_exists(path: str):
+    file_path = WORKSPACE_ROOT / path
+    return {"exists": file_path.exists()}
+
 @app.get("/api/file")
 def get_file(path: str):
     file_path = WORKSPACE_ROOT / path
@@ -94,7 +99,20 @@ def save_file(req: FileSaveRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+@app.delete("/api/file")
+def delete_file(path: str):
+    file_path = WORKSPACE_ROOT / path
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Path not found")
+    try:
+        if file_path.is_file():
+            file_path.unlink()
+        elif file_path.is_dir():
+            import shutil
+            shutil.rmtree(file_path)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/new")
 def new_file(req: FileNewRequest):

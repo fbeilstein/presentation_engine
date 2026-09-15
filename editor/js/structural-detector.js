@@ -1,7 +1,9 @@
 import { EditorView } from '@codemirror/view';
+import { Transaction } from '@codemirror/state';
 import { regionMapField, setRegionMap } from './region-map.js';
 import { currentDocumentModel, currentFilePath } from './editor.js';
 import { syncAnnotation } from './sync-filter.js';
+import { computeChanges } from './diff-utils.js';
 
 function findAllIncludes(doc) {
     const includes = [];
@@ -73,11 +75,20 @@ function scheduleStructuralRebuild(view) {
         const { flatText, map: newMap } = currentDocumentModel.buildFlatText();
         
         // Check if flatText changed (e.g. new file content pulled in)
-        if (view.state.doc.toString() !== flatText) {
+        const oldText = view.state.doc.toString();
+        if (oldText !== flatText) {
+            const diffChanges = computeChanges(oldText, flatText);
+            console.log("oldText length:", oldText.length, "flatText length:", flatText.length);
+            console.log("computeChanges produced:", JSON.stringify(diffChanges));
+            
             view.dispatch({
-                changes: { from: 0, to: view.state.doc.length, insert: flatText },
+                changes: diffChanges,
                 effects: setRegionMap.of(newMap),
-                annotations: syncAnnotation.of(true)
+                annotations: [
+                    syncAnnotation.of(true),
+                    // Use addToHistory(false) so the structural expansion doesn't pollute the user's undo stack
+                    Transaction.addToHistory.of(false)
+                ]
             });
         } else {
             view.dispatch({

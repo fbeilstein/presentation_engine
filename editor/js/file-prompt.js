@@ -99,14 +99,17 @@ export async function promptNewFile(title, defaultName, basePath = '') {
                     checkPath = `${basePath}/${val}`;
                 }
                 
-                const res = await fetch('/api/file?path=' + encodeURIComponent(checkPath));
+                const res = await fetch('/api/exists?path=' + encodeURIComponent(checkPath));
                 if (res.ok) {
-                    errorEl.textContent = 'Warning: File already exists and will be overwritten.';
-                    // Change ok button text to confirm
-                    if (okBtn.textContent !== 'Overwrite') {
-                        okBtn.textContent = 'Overwrite';
-                        okBtn.style.backgroundColor = '#e74c3c';
-                        return;
+                    const data = await res.json();
+                    if (data.exists) {
+                        errorEl.textContent = 'Warning: File already exists and will be overwritten.';
+                        // Change ok button text to confirm
+                        if (okBtn.textContent !== 'Overwrite') {
+                            okBtn.textContent = 'Overwrite';
+                            okBtn.style.backgroundColor = '#e74c3c';
+                            return;
+                        }
                     }
                 }
             } catch (e) {

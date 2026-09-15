@@ -20,6 +20,7 @@ export async function initFileTree() {
         }
         extractHtmlContexts(data.tree);
         
+        container.innerHTML = '';
         renderTree(data.tree, container);
     } catch (e) {
         container.innerHTML = `<div style="color:red; padding:10px;">Failed to load workspace tree.</div>`;
@@ -75,5 +76,78 @@ function renderTree(nodes, container) {
                 }
             });
         }
+        
+        el.addEventListener('contextmenu', (e) => showTreeContextMenu(e, node));
     });
+}
+
+function showTreeContextMenu(e, node) {
+    e.preventDefault();
+    
+    // Remove existing
+    const existing = document.querySelector('.tree-context-menu');
+    if (existing) existing.remove();
+    
+    const menu = document.createElement('div');
+    menu.className = 'context-menu tree-context-menu';
+    menu.style.left = `${e.clientX}px`;
+    menu.style.top = `${e.clientY}px`;
+    
+    if (node.is_dir) {
+        const createItem = document.createElement('div');
+        createItem.className = 'context-menu-item';
+        createItem.textContent = 'Create New File...';
+        createItem.onclick = async () => {
+            menu.remove();
+            const { promptNewFile } = await import('./file-prompt.js');
+            let newFilename = await promptNewFile("Enter new filename", "new_file.md", node.path);
+            if (!newFilename) return;
+            
+            if (!newFilename.includes('.')) newFilename += '.md';
+            
+            const fullPath = `${node.path}/${newFilename}`;
+            
+            try {
+                await fetch(`/api/file`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: fullPath, content: '' })
+                });
+                // Refresh tree
+                initFileTree();
+            } catch (err) {
+                alert("Failed to create file: " + err.message);
+            }
+        };
+        menu.appendChild(createItem);
+    }
+    
+    const deleteItem = document.createElement('div');
+    deleteItem.className = 'context-menu-item';
+    deleteItem.textContent = 'Delete';
+    deleteItem.style.color = '#e74c3c';
+    deleteItem.onclick = async () => {
+        menu.remove();
+        if (confirm(`Are you sure you want to delete ${node.name}?`)) {
+            try {
+                await fetch(`/api/file?path=${encodeURIComponent(node.path)}`, {
+                    method: 'DELETE'
+                });
+                initFileTree();
+            } catch (err) {
+                alert("Failed to delete: " + err.message);
+            }
+        }
+    };
+    menu.appendChild(deleteItem);
+    
+    document.body.appendChild(menu);
+    
+    const closeMenu = (evt) => {
+        if (!menu.contains(evt.target)) {
+            menu.remove();
+            document.removeEventListener('mousedown', closeMenu);
+        }
+    };
+    document.addEventListener('mousedown', closeMenu);
 }

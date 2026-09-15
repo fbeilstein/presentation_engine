@@ -1,9 +1,11 @@
 import { ViewPlugin } from '@codemirror/view';
+import { Transaction, ChangeSet } from '@codemirror/state';
 import { editorView, currentFilePath, currentDocumentModel } from './editor.js';
 import { promptNewFile } from './file-prompt.js';
 import { outlineField } from './outline-ast.js';
 import { syncAnnotation } from './sync-filter.js';
-import { expandRegionAnnotation, regionMapField } from './region-map.js';
+import { expandRegionAnnotation, regionMapField, setRegionMap } from './region-map.js';
+import { initFileTree } from './file-tree.js';
 
 export let globalSlideMapping = []; // keep for compatibility if needed, but we should use outlineField
 let selectedSlides = new Set();
@@ -221,12 +223,6 @@ function handleContextMenu(e, index) {
     menu.style.left = `${e.clientX}px`;
     menu.style.top = `${e.clientY}px`;
     
-    const addEmpty = document.createElement('div');
-    addEmpty.className = 'context-menu-item';
-    addEmpty.textContent = 'Create Empty File (include)';
-    addEmpty.onclick = () => { hideContextMenu(); createEmptyFileInclude(); };
-    menu.appendChild(addEmpty);
-
     const extract = document.createElement('div');
     extract.className = 'context-menu-item';
     extract.textContent = 'Extract to New File...';
@@ -287,6 +283,8 @@ async function deleteSelectedSlides() {
     selectedSlides.clear();
 }
 
+import { computeChanges } from './diff-utils.js';
+
 async function extractToNewFile() {
     if (selectedSlides.size === 0) return;
     
@@ -295,35 +293,105 @@ async function extractToNewFile() {
     const firstIdx = sortedIdx[0];
     const firstSlide = outline[firstIdx];
     
-    if (firstSlide.file !== currentFilePath) {
-        alert("You can only extract slides from the currently open file.");
-        return;
-    }
-    
-    for (let i = 0; i < sortedIdx.length; i++) {
-        const slide = outline[sortedIdx[i]];
-        if (slide.file !== currentFilePath || slide.localIndex !== firstSlide.localIndex + i) {
-            alert("Please select a continuous block of slides from the current file.");
-            return;
-        }
-    }
-    
-    const basePath = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
+    let basePath = firstSlide.file ? firstSlide.file.substring(0, firstSlide.file.lastIndexOf('/')) : '';
+    const { promptNewFile } = await import('./file-prompt.js');
     const newFilename = await promptNewFile("Enter new filename", "section.md", basePath);
     if (!newFilename) return;
     
-    const lastSlide = outline[sortedIdx[sortedIdx.length - 1]];
+    const { resolveIncludePath } = await import('./region-map.js');
+    const fullNewPath = resolveIncludePath(`${basePath}/dummy.md`, newFilename);
     
-    const extractedText = editorView.state.doc.sliceString(firstSlide.from, lastSlide.to);
+    const extractedText = sortedIdx.map(idx => {
+        return editorView.state.doc.sliceString(outline[idx].from, outline[idx].to);
+    }).join('\n---\n');
     
-    const fullNewPath = basePath ? `${basePath}/${newFilename}` : newFilename;
+    try {
+        await fetch(`/api/file`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: fullNewPath, content: extractedText })
+        });
+        initFileTree();
+    } catch (err) {
+        alert("Failed to save new file: " + err.message);
+        return;
+    }
+    
     currentDocumentModel.fileCache[fullNewPath] = extractedText;
     
     const includeDirective = `\n!include(${newFilename})\n`;
     
+    const cutChanges = [];
+    for (let i = 0; i < sortedIdx.length; i++) {
+        const slide = outline[sortedIdx[i]];
+        let delFrom = slide.from;
+        let delTo = slide.to;
+        
+        if (i !== 0) {
+            // Try to consume the preceding ---\n
+            if (delFrom >= 4 && editorView.state.doc.sliceString(delFrom - 4, delFrom) === '---\n') {
+                delFrom -= 4;
+            } else if (delFrom >= 5 && editorView.state.doc.sliceString(delFrom - 5, delFrom) === '\n---\n') {
+                delFrom -= 5;
+            }
+        }
+        cutChanges.push({ from: delFrom, to: delTo, insert: "" });
+    }
+    
+    // STEP 1 (The Cut): Dispatch a transaction that deletes the slides, creating the "empty frame"
     editorView.dispatch({
-        changes: { from: firstSlide.from, to: lastSlide.to, insert: includeDirective }
+        changes: cutChanges,
+        userEvent: "extract.cut",
+        annotations: Transaction.addToHistory.of(true)
     });
+    
+    // Now we manually update the file cache of the parent file to include the directive
+    // We do this by applying the include directive directly into the parent's fileCache
+    // wait, actually we can just rely on the structural detector to do it?
+    // No, we must insert the include directive into the cache.
+    // Let's just insert the include directive and the content into the editor as STEP 2.
+    // The include directive will be mapped to the parent file by `applyChangesToCache`.
+    // Wait, the user said AT ONCE add include and content.
+    // But they don't want the include directive visible. They want it expanded.
+    
+    // We run the structural detector manually to build the new flat text and region map
+    // First, we forcefully inject the include directive into the parent fileCache at the correct location.
+    // Actually, it's safer to just dispatch the include directive text into the editor, 
+    // let `applyChangesToCache` put it in the parent file, and THEN immediately run the structural detector.
+    
+    // Step 2a: Insert the raw include directive so it gets saved to the parent file cache
+    editorView.dispatch({
+        changes: { from: cutChanges[0].from, insert: includeDirective },
+        userEvent: "extract.paste.include"
+        // No addToHistory here, we want it grouped with the next one or invisible
+    });
+    
+    // Step 2b: Force structural detector to run synchronously to build the final expanded state
+    const { flatText, map: newMap } = currentDocumentModel.buildFlatText();
+    
+    const oldText = editorView.state.doc.toString();
+    if (oldText !== flatText) {
+        const diffChanges = computeChanges(oldText, flatText);
+
+        editorView.dispatch({
+            changes: diffChanges,
+            effects: setRegionMap.of(newMap),
+            userEvent: "extract.paste",
+            annotations: [
+                syncAnnotation.of(true), // Skip applyChangesToCache for this structural expansion
+                Transaction.addToHistory.of(true) // RECORD THIS IN HISTORY
+            ]
+        });
+    } else {
+        editorView.dispatch({
+            effects: setRegionMap.of(newMap),
+            userEvent: "extract.paste",
+            annotations: [
+                syncAnnotation.of(true), // Skip applyChangesToCache for this structural expansion
+                Transaction.addToHistory.of(true) // RECORD THIS IN HISTORY
+            ]
+        });
+    }
     
     selectedSlides.clear();
 }

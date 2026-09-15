@@ -2,7 +2,8 @@ import { EditorState, StateEffect, Transaction } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, gutter, GutterMarker, drawSelection, highlightActiveLineGutter, highlightActiveLine, crosshairCursor } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { syntaxHighlighting, defaultHighlightStyle, foldGutter, foldKeymap } from '@codemirror/language';
+import { syntaxHighlighting, defaultHighlightStyle, foldGutter, foldKeymap, foldService } from '@codemirror/language';
+import { search, searchKeymap } from '@codemirror/search';
 import { oneDark } from '@codemirror/theme-one-dark';
 
 import { availableHtmlContexts } from './file-tree.js';
@@ -121,6 +122,37 @@ const stripeGutter = gutter({
     }
 });
 
+const customFoldService = foldService.of((state, lineStart, lineEnd) => {
+    const line = state.doc.lineAt(lineStart);
+    const text = line.text.trim();
+    
+    if (text === '---') {
+        let endLine = line.number;
+        while (endLine < state.doc.lines) {
+            endLine++;
+            const nextLine = state.doc.line(endLine);
+            if (nextLine.text.trim() === '---') {
+                return { from: line.to, to: nextLine.from - 1 };
+            }
+        }
+        return { from: line.to, to: state.doc.length };
+    }
+    
+    if (text.startsWith('!include(')) {
+        const map = state.field(regionMapField, false);
+        if (map) {
+            const includeRegion = map.regions.find(r => r.type === 'include-directive' && r.from <= line.from && r.to >= line.from);
+            if (includeRegion) {
+                const nextRegion = map.regions.find(r => r.from === includeRegion.to);
+                if (nextRegion && nextRegion.type === 'expanded-include') {
+                    return { from: line.to, to: nextRegion.to };
+                }
+            }
+        }
+    }
+    return null;
+});
+
 let editorExtensions = [];
 
 export function initEditor() {
@@ -129,6 +161,8 @@ export function initEditor() {
     editorExtensions = [
         lineNumbers(),
         foldGutter(),
+        customFoldService,
+        search({ top: true }),
         highlightActiveLineGutter(),
         drawSelection(),
         crosshairCursor(),
@@ -142,6 +176,7 @@ export function initEditor() {
             ...defaultKeymap, 
             ...historyKeymap,
             ...foldKeymap,
+            ...searchKeymap,
             { key: "Mod-s", run: () => { saveDocumentToDisk(editorView); return true; } }
         ]),
         regionMapField,

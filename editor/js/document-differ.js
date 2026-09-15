@@ -2,6 +2,7 @@ import { DocumentModel } from './document-model.js';
 import { setRegionMap } from './region-map.js';
 import { syncAnnotation } from './sync-filter.js';
 import { Transaction } from '@codemirror/state';
+import { computeChanges } from './diff-utils.js';
 
 let currentModel = null;
 let saveTimeout = null;
@@ -17,8 +18,10 @@ export async function initDocument(path, cmView) {
     currentModel.onModelUpdated = () => {
         const { flatText, map } = currentModel.buildFlatText();
         if (cmView.state.doc.toString() !== flatText) {
+            const diffChanges = computeChanges(cmView.state.doc.toString(), flatText);
+
             cmView.dispatch({
-                changes: { from: 0, to: cmView.state.doc.length, insert: flatText },
+                changes: diffChanges,
                 effects: setRegionMap.of(map),
                 annotations: [
                     syncAnnotation.of(true),

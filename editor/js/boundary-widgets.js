@@ -55,7 +55,6 @@ function buildDecorations(state) {
             if (region.type === 'expanded-include') {
                 widgets.push(Decoration.widget({
                     widget: new IncludeEndWidget(region.file),
-                    block: true, 
                     side: 1
                 }).range(region.to));
             }

@@ -19,7 +19,7 @@ export class DocumentModel {
         try {
             const res = await fetch('/api/file?path=' + encodeURIComponent(path));
             if (!res.ok) {
-                this.fileCache[path] = "";
+                this.fileCache[path] = null;
                 return;
             }
             const data = await res.json();
@@ -35,7 +35,7 @@ export class DocumentModel {
             }
         } catch (e) {
             console.error(`Error fetching ${path}`, e);
-            this.fileCache[path] = "";
+            this.fileCache[path] = null;
         }
     }
     

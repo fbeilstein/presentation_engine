@@ -172,6 +172,54 @@ async def upload_file(path: str = Form(...), file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class OpenExternalRequest(BaseModel):
+    path: str
+
+@app.post("/api/open-external")
+def open_external(req: OpenExternalRequest):
+    import subprocess
+    import platform
+    
+    # Resolve against workspace root (could be relative path)
+    # The client might send '/assets/img.png' or 'assets/img.png'
+    clean_path = req.path.lstrip('/')
+    file_path = WORKSPACE_ROOT / clean_path
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    ext = file_path.suffix.lower()
+    config_path = Path(__file__).parent / "tools_config.json"
+    
+    app_cmd = None
+    if config_path.exists():
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+                app_cmd = config.get("external_apps", {}).get(ext)
+        except Exception:
+            pass
+            
+    if app_cmd and app_cmd != "default":
+        # Launch configured app
+        try:
+            subprocess.Popen([app_cmd, str(file_path)])
+            return {"ok": True, "app": app_cmd}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to launch {app_cmd}: {e}")
+    else:
+        # Launch OS default
+        try:
+            if platform.system() == 'Darwin':       # macOS
+                subprocess.Popen(['open', str(file_path)])
+            elif platform.system() == 'Windows':    # Windows
+                os.startfile(str(file_path))
+            else:                                   # linux variants
+                subprocess.Popen(['xdg-open', str(file_path)])
+            return {"ok": True, "app": "default"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to launch default app: {e}")
+
 # Fallback to serve static files from workspace root
 app.mount("/", StaticFiles(directory=str(WORKSPACE_ROOT), html=True), name="static")
 

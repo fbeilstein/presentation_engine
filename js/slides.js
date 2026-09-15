@@ -44,7 +44,7 @@ function _relativePrefix(fromDir, toDir) {
 const DEMO_PREFIX = _relativePrefix(SANDBOX_DIR, PAGE_DIR);
 
 // Core Slide Engine State
-let currentSlideIndex = 0;
+window.currentSlideIndex = window.currentSlideIndex || 0;
 let slides = [];
 
 // Configuration
@@ -273,31 +273,31 @@ function showSlide(index) {
     if (index < 0 || index >= slides.length) return;
 
     if (window.parent !== window) {
-        currentSlideIndex = index;
+        window.currentSlideIndex = index;
         window.parent.postMessage({ type: 'navigate_slide', index: index }, '*');
         return;
     }
 
     // Hide current
-    slides[currentSlideIndex].classList.remove('active');
+    slides[window.currentSlideIndex].classList.remove('active');
 
     // Show new
-    currentSlideIndex = index;
-    slides[currentSlideIndex].classList.add('active');
+    window.currentSlideIndex = index;
+    slides[window.currentSlideIndex].classList.add('active');
 
     updateCounter();
 }
 window.showSlide = showSlide;
 
 function nextSlide() {
-    showSlide(currentSlideIndex + 1);
+    showSlide(window.currentSlideIndex + 1);
 }
 
 function prevSlide() {
-    showSlide(currentSlideIndex - 1);
+    showSlide(window.currentSlideIndex - 1);
 }
 
-function updateCounter(index = currentSlideIndex, total = slides.length) {
+function updateCounter(index = window.currentSlideIndex, total = slides.length) {
     const counter = document.getElementById('slide-counter');
     if (counter && total > 0) {
         counter.textContent = `${index + 1} / ${total}`;

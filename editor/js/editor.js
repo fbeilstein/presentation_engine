@@ -15,6 +15,7 @@ import { endBoundaryDecorations } from './boundary-widgets.js';
 import { structuralDetector } from './structural-detector.js';
 import { outlineField } from './outline-ast.js';
 import { outlineRendererPlugin } from './outline.js';
+import { imageToolExtension } from './tools/image-tool.js';
 
 export let editorView = null;
 export let currentFilePath = null;
@@ -185,6 +186,7 @@ export function initEditor() {
         structuralDetector,
         outlineField,
         outlineRendererPlugin,
+        imageToolExtension(),
         EditorView.updateListener.of((update) => {
             if (update.docChanged) {
                 if (currentDocumentModel) {
@@ -196,20 +198,6 @@ export function initEditor() {
             }
             if (update.selectionSet) {
                 pushCurrentSlide(true);
-            }
-        }),
-        EditorView.domEventHandlers({
-            paste: (e, view) => {
-                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-                for (let item of items) {
-                    if (item.type.indexOf("image") === 0) {
-                        e.preventDefault();
-                        const blob = item.getAsFile();
-                        showPasteModal(blob);
-                        return true;
-                    }
-                }
-                return false;
             }
         })
     ];
@@ -332,25 +320,7 @@ window.addEventListener('message', (e) => {
     }
 });
 
-let pendingPasteBlob = null;
-function showPasteModal(blob) {
-    pendingPasteBlob = blob;
-    const modal = document.getElementById('paste-modal');
-    modal.classList.remove('hidden');
-    
-    if (currentFilePath) {
-        const parts = currentFilePath.split('/');
-        parts.pop();
-        const defaultPath = parts.join('/') + '/assets/image_' + Date.now() + '.png';
-        document.getElementById('paste-filename').value = defaultPath;
-    }
-}
-
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('btn-paste-cancel').addEventListener('click', () => {
-        document.getElementById('paste-modal').classList.add('hidden');
-        pendingPasteBlob = null;
-    });
     
     const saveBtn = document.getElementById('save-btn');
     if (saveBtn) {
@@ -378,42 +348,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
-    document.getElementById('btn-paste-save').addEventListener('click', async () => {
-        if (!pendingPasteBlob) return;
-        const path = document.getElementById('paste-filename').value;
-        const formData = new FormData();
-        formData.append('path', path);
-        formData.append('file', pendingPasteBlob);
-        
-        try {
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-            if (res.ok) {
-                document.getElementById('paste-modal').classList.add('hidden');
-                
-                const fileParts = currentFilePath.split('/');
-                fileParts.pop();
-                const fileDir = fileParts.join('/') + '/';
-                let relPath = path;
-                if (path.startsWith(fileDir)) {
-                    relPath = path.substring(fileDir.length);
-                } else {
-                    relPath = '/' + path;
-                }
-                
-                const snippet = `![Pasted Image](${relPath}){width=80% center}\n`;
-                const cursor = editorView.state.selection.main.head;
-                editorView.dispatch({
-                    changes: { from: cursor, insert: snippet }
-                });
-            }
-        } catch(e) {
-            alert("Upload failed: " + e.message);
-        }
-    });
 });
 
 export function jumpToFileInclude(targetPath) {

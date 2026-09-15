@@ -122,6 +122,7 @@ function buildSlideMapping() {
 window.addEventListener('message', (e) => {
     if (e.data.type === 'editor_slide') {
         const { markdown, activeIndex } = e.data;
+        window.currentSlideIndex = activeIndex;
         const allSlides = markdown.split(/^---$/gm);
         const totalSlides = allSlides.length;
         const slideMarkdown = allSlides[activeIndex] || '';
@@ -262,3 +263,42 @@ function updateSingleSlide(globalIndex, rawMd) {
         }
     }).catch(err => console.error("Failed to load slide renderer", err));
 }
+
+document.addEventListener('click', (e) => {
+    if (e.target.tagName === 'IMG') {
+        const slide = e.target.closest('.slide');
+        if (slide) {
+            // Find global index
+            const slides = Array.from(document.querySelectorAll('.slide'));
+            const index = slides.indexOf(slide);
+            
+            // If in editor mode, there might be only 1 slide rendered.
+            // We need to use the data-index if it exists, but the bridge actually doesn't set data-index.
+            // Wait, when the editor updates, it renders the ONE slide at globalIndex!
+            // But wait, the editor passes `activeIndex` to the iframe, and `bridge.js` might clear the container.
+            // Let's check how the editor mode is determined.
+            // Actually, we can just pass the index. 
+            // In editor mode (where only one slide exists), `slides.indexOf(slide)` is 0. 
+            // We should use a data attribute if available, or try to infer from the URL hash.
+            // Let's look at `window.currentSlideIndex`.
+            const effectiveIndex = window.currentSlideIndex !== undefined ? window.currentSlideIndex : index;
+            
+            window.parent.postMessage({
+                type: 'focus_image',
+                src: e.target.getAttribute('src'),
+                index: effectiveIndex
+            }, '*');
+        }
+    }
+});
+
+document.addEventListener('dblclick', (e) => {
+    if (e.target.tagName === 'IMG') {
+        e.preventDefault();
+        window.parent.postMessage({
+            type: 'open_external_image',
+            path: e.target.getAttribute('src')
+        }, '*');
+    }
+});
+

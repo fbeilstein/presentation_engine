@@ -289,11 +289,14 @@ async function extractToNewFile() {
     if (selectedSlides.size === 0) return;
     
     const outline = editorView.state.field(outlineField);
+    const regionMap = editorView.state.field(regionMapField);
     const sortedIdx = Array.from(selectedSlides).sort((a,b) => a-b);
     const firstIdx = sortedIdx[0];
     const firstSlide = outline[firstIdx];
     
-    let basePath = firstSlide.file ? firstSlide.file.substring(0, firstSlide.file.lastIndexOf('/')) : '';
+    // Determine the parent file that owns these slides
+    const parentFile = firstSlide.file;
+    let basePath = parentFile ? parentFile.substring(0, parentFile.lastIndexOf('/')) : '';
     const { promptNewFile } = await import('./file-prompt.js');
     const newFilename = await promptNewFile("Enter new filename", "section.md", basePath);
     if (!newFilename) return;
@@ -301,10 +304,12 @@ async function extractToNewFile() {
     const { resolveIncludePath } = await import('./region-map.js');
     const fullNewPath = resolveIncludePath(`${basePath}/dummy.md`, newFilename);
     
+    // Grab the text of all selected slides
     const extractedText = sortedIdx.map(idx => {
         return editorView.state.doc.sliceString(outline[idx].from, outline[idx].to);
     }).join('\n---\n');
     
+    // Save the new file to disk
     try {
         await fetch(`/api/file`, {
             method: 'POST',
@@ -317,81 +322,59 @@ async function extractToNewFile() {
         return;
     }
     
+    // --- CALCULATE REPLACEMENT STRING ---
+    // We want to replace the selected slides with `!include(section.md)`.
+    // We must ensure the `!include` is properly separated by `---` from surrounding content
+    // in the editor document so it doesn't glue to adjacent slides.
+    
+    let docStr = editorView.state.doc.toString();
+    
+    // We will delete from the start of the first slide to the end of the last slide.
+    // Wait, what about the separators BETWEEN the selected slides? They are within the from/to range,
+    // so they will be deleted.
+    // What about the separator BEFORE the first slide?
+    let delFrom = firstSlide.from;
+    let delTo = outline[sortedIdx[sortedIdx.length - 1]].to;
+    
+    let beforeText = docStr.substring(0, delFrom);
+    let afterText = docStr.substring(delTo);
+    
+    const includeDirective = `!include(${newFilename})\n`;
+    let prefix = '';
+    let suffix = '';
+    
+    // Ensure we don't start mid-line
+    if (beforeText.length > 0 && !beforeText.endsWith('\n')) {
+        prefix += '\n';
+    }
+    
+    // If there's content before us and it doesn't end with a slide separator, add one
+    if (beforeText.trim().length > 0 && !beforeText.trimEnd().endsWith('---')) {
+        prefix += '---\n';
+    }
+    
+    // If there's content after us and it doesn't start with a slide separator, add one
+    if (afterText.trim().length > 0 && !afterText.trimStart().startsWith('---')) {
+        suffix += '---\n';
+    }
+    
+    const replacementStr = prefix + includeDirective + suffix;
+    
+    // Seed the cache with the new file so structural-detector doesn't need to fetch it
     currentDocumentModel.fileCache[fullNewPath] = extractedText;
     
-    const includeDirective = `\n!include(${newFilename})\n`;
+    // --- DISPATCH STANDARD EDIT ---
+    // By dispatching a standard CodeMirror edit, applyChangesToCache will automatically
+    // update the parent file's cache. Then structural-detector will notice the new !include,
+    // rebuild the AST, and silently expand the slides. 
+    // If the user presses Ctrl-Z, it will perfectly revert the CodeMirror edit, which in turn
+    // automatically restores the parent file's cache!
     
-    const cutChanges = [];
-    for (let i = 0; i < sortedIdx.length; i++) {
-        const slide = outline[sortedIdx[i]];
-        let delFrom = slide.from;
-        let delTo = slide.to;
-        
-        if (i !== 0) {
-            // Try to consume the preceding ---\n
-            if (delFrom >= 4 && editorView.state.doc.sliceString(delFrom - 4, delFrom) === '---\n') {
-                delFrom -= 4;
-            } else if (delFrom >= 5 && editorView.state.doc.sliceString(delFrom - 5, delFrom) === '\n---\n') {
-                delFrom -= 5;
-            }
-        }
-        cutChanges.push({ from: delFrom, to: delTo, insert: "" });
-    }
-    
-    // STEP 1 (The Cut): Dispatch a transaction that deletes the slides, creating the "empty frame"
     editorView.dispatch({
-        changes: cutChanges,
-        userEvent: "extract.cut",
+        changes: { from: delFrom, to: delTo, insert: replacementStr },
+        userEvent: "extract.to.new.file",
         annotations: Transaction.addToHistory.of(true)
     });
-    
-    // Now we manually update the file cache of the parent file to include the directive
-    // We do this by applying the include directive directly into the parent's fileCache
-    // wait, actually we can just rely on the structural detector to do it?
-    // No, we must insert the include directive into the cache.
-    // Let's just insert the include directive and the content into the editor as STEP 2.
-    // The include directive will be mapped to the parent file by `applyChangesToCache`.
-    // Wait, the user said AT ONCE add include and content.
-    // But they don't want the include directive visible. They want it expanded.
-    
-    // We run the structural detector manually to build the new flat text and region map
-    // First, we forcefully inject the include directive into the parent fileCache at the correct location.
-    // Actually, it's safer to just dispatch the include directive text into the editor, 
-    // let `applyChangesToCache` put it in the parent file, and THEN immediately run the structural detector.
-    
-    // Step 2a: Insert the raw include directive so it gets saved to the parent file cache
-    editorView.dispatch({
-        changes: { from: cutChanges[0].from, insert: includeDirective },
-        userEvent: "extract.paste.include"
-        // No addToHistory here, we want it grouped with the next one or invisible
-    });
-    
-    // Step 2b: Force structural detector to run synchronously to build the final expanded state
-    const { flatText, map: newMap } = currentDocumentModel.buildFlatText();
-    
-    const oldText = editorView.state.doc.toString();
-    if (oldText !== flatText) {
-        const diffChanges = computeChanges(oldText, flatText);
-
-        editorView.dispatch({
-            changes: diffChanges,
-            effects: setRegionMap.of(newMap),
-            userEvent: "extract.paste",
-            annotations: [
-                syncAnnotation.of(true), // Skip applyChangesToCache for this structural expansion
-                Transaction.addToHistory.of(true) // RECORD THIS IN HISTORY
-            ]
-        });
-    } else {
-        editorView.dispatch({
-            effects: setRegionMap.of(newMap),
-            userEvent: "extract.paste",
-            annotations: [
-                syncAnnotation.of(true), // Skip applyChangesToCache for this structural expansion
-                Transaction.addToHistory.of(true) // RECORD THIS IN HISTORY
-            ]
-        });
-    }
     
     selectedSlides.clear();
 }

@@ -43,7 +43,7 @@ export function buildOutline(state) {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (line.trim() === '---') {
-            if (currentOffset > currentSlideFrom) {
+            if (currentOffset >= currentSlideFrom) {
                 const text = doc.substring(currentSlideFrom, currentOffset);
                 const nonWsIndex = text.search(/\S/);
                 const targetOffset = nonWsIndex >= 0 ? currentSlideFrom + nonWsIndex : currentSlideFrom;
@@ -66,7 +66,7 @@ export function buildOutline(state) {
         currentOffset += line.length + (i < lines.length - 1 ? 1 : 0);
     }
     
-    if (currentOffset > currentSlideFrom) {
+    if (currentOffset >= currentSlideFrom) {
         const text = doc.substring(currentSlideFrom, currentOffset);
         const nonWsIndex = text.search(/\S/);
         const targetOffset = nonWsIndex >= 0 ? currentSlideFrom + nonWsIndex : currentSlideFrom;

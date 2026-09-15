@@ -4,13 +4,11 @@ export class DocumentModel {
     constructor() {
         this.rootFile = null;
         this.fileCache = {}; // path -> content string
-        this.onModelUpdated = null;
     }
 
     async loadRoot(path) {
         this.rootFile = path;
         await this._fetchRecursive(path);
-        if (this.onModelUpdated) this.onModelUpdated();
     }
 
     async _fetchRecursive(path) {

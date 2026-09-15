@@ -15,46 +15,60 @@ function createJournalPatch(fileCache) {
 
 export async function initDocument(path, cmView) {
     currentModel = new DocumentModel();
-    currentModel.onModelUpdated = () => {
-        const { flatText, map } = currentModel.buildFlatText();
-        if (cmView.state.doc.toString() !== flatText) {
-            const diffChanges = computeChanges(cmView.state.doc.toString(), flatText);
-
-            cmView.dispatch({
-                changes: diffChanges,
-                effects: setRegionMap.of(map),
-                annotations: [
-                    syncAnnotation.of(true),
-                    Transaction.addToHistory.of(false)
-                ]
-            });
-        } else {
-            cmView.dispatch({
-                effects: setRegionMap.of(map),
-                annotations: syncAnnotation.of(true)
-            });
-        }
-    };
     await currentModel.loadRoot(path);
+    
+    // Initial load update
+    const { flatText, map } = currentModel.buildFlatText();
+    if (cmView.state.doc.toString() !== flatText) {
+        const diffChanges = computeChanges(cmView.state.doc.toString(), flatText);
+
+        cmView.dispatch({
+            changes: diffChanges,
+            effects: setRegionMap.of(map),
+            annotations: [
+                syncAnnotation.of(true),
+                Transaction.addToHistory.of(false)
+            ]
+        });
+    } else {
+        cmView.dispatch({
+            effects: setRegionMap.of(map),
+            annotations: syncAnnotation.of(true)
+        });
+    }
     
     // Check for journal recovery
     try {
         const res = await fetch('/api/journal');
-        if (res.ok) {
-            const data = await res.json();
-            if (data.journal && data.journal.length > 0) {
-                const lastPatch = data.journal[data.journal.length - 1];
-                if (lastPatch.type === "fileCache" && lastPatch.cache && (path in lastPatch.cache)) {
-                    console.log("Recovering from journal...");
-                    currentModel.fileCache = lastPatch.cache;
-                    if (currentModel.onModelUpdated) currentModel.onModelUpdated();
+        const data = await res.json();
+        if (data.journal && data.journal.length > 0) {
+            console.log("Recovering from journal...");
+            const lastState = data.journal[data.journal.length - 1];
+            if (lastState.type === "fileCache") {
+                currentModel.fileCache = lastState.cache;
+                
+                // Trigger view update for journal recovery
+                const { flatText, map } = currentModel.buildFlatText();
+                if (cmView.state.doc.toString() !== flatText) {
+                    const diffChanges = computeChanges(cmView.state.doc.toString(), flatText);
+                    cmView.dispatch({
+                        changes: diffChanges,
+                        effects: setRegionMap.of(map),
+                        annotations: [
+                            syncAnnotation.of(true),
+                            Transaction.addToHistory.of(false)
+                        ]
+                    });
                 } else {
-                    console.log("Journal belongs to a different file, ignoring.");
+                    cmView.dispatch({
+                        effects: setRegionMap.of(map),
+                        annotations: syncAnnotation.of(true)
+                    });
                 }
             }
         }
     } catch (e) {
-        console.error("Failed to load journal", e);
+        console.error("Journal recovery failed", e);
     }
     
     return currentModel;

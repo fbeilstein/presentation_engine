@@ -45,8 +45,6 @@ export const structuralDetector = EditorView.updateListener.of((update) => {
     // wait, if we mapped pos, we should just use the new doc to see what the include directive text is NOW
     
     // Check if the actual count or content changed
-    // Wait, `findAllIncludes` is a regex scan.
-    // If the arrays are different, it means a structural change occurred.
     const changed = !arraysEqual(currentIncludes.map(s=>s.trim()), previousIncludes);
     
     if (changed) {
@@ -85,9 +83,7 @@ function scheduleStructuralRebuild(view) {
                 changes: diffChanges,
                 effects: setRegionMap.of(newMap),
                 annotations: [
-                    syncAnnotation.of(true),
-                    // Use addToHistory(false) so the structural expansion doesn't pollute the user's undo stack
-                    Transaction.addToHistory.of(false)
+                    syncAnnotation.of(true)
                 ]
             });
         } else {

@@ -85,4 +85,14 @@ document.addEventListener('DOMContentLoaded', () => {
     initFileTree();
     initOutline();
     initTools();
+    
+    // 4. Auto-load previous file from journal
+    fetch('/api/journal').then(r => r.json()).then(data => {
+        if (data.journal && data.journal.length > 0) {
+            const lastState = data.journal[data.journal.length - 1];
+            if (lastState.type === "fileCache" && lastState.rootFile) {
+                import('./editor.js').then(m => m.loadFileFromServer(lastState.rootFile));
+            }
+        }
+    }).catch(e => console.error("Auto-load failed", e));
 });

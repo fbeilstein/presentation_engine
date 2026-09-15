@@ -9,8 +9,8 @@ let saveTimeout = null;
 let lastKnownJournalPatch = null;
 
 // Lightweight file-based journal
-function createJournalPatch(fileCache) {
-    return { type: "fileCache", cache: fileCache };
+function createJournalPatch(rootFile, fileCache) {
+    return { type: "fileCache", rootFile: rootFile, cache: fileCache };
 }
 
 export async function initDocument(path, cmView) {
@@ -45,25 +45,30 @@ export async function initDocument(path, cmView) {
             console.log("Recovering from journal...");
             const lastState = data.journal[data.journal.length - 1];
             if (lastState.type === "fileCache") {
-                currentModel.fileCache = lastState.cache;
-                
-                // Trigger view update for journal recovery
-                const { flatText, map } = currentModel.buildFlatText();
-                if (cmView.state.doc.toString() !== flatText) {
-                    const diffChanges = computeChanges(cmView.state.doc.toString(), flatText);
-                    cmView.dispatch({
-                        changes: diffChanges,
-                        effects: setRegionMap.of(map),
-                        annotations: [
-                            syncAnnotation.of(true),
-                            Transaction.addToHistory.of(false)
-                        ]
-                    });
+                if (lastState.cache[path] !== undefined) {
+                    currentModel.fileCache = lastState.cache;
+                    
+                    // Trigger view update for journal recovery
+                    const { flatText, map } = currentModel.buildFlatText();
+                    if (cmView.state.doc.toString() !== flatText) {
+                        const diffChanges = computeChanges(cmView.state.doc.toString(), flatText);
+                        cmView.dispatch({
+                            changes: diffChanges,
+                            effects: setRegionMap.of(map),
+                            annotations: [
+                                syncAnnotation.of(true),
+                                Transaction.addToHistory.of(false)
+                            ]
+                        });
+                    } else {
+                        cmView.dispatch({
+                            effects: setRegionMap.of(map),
+                            annotations: syncAnnotation.of(true)
+                        });
+                    }
                 } else {
-                    cmView.dispatch({
-                        effects: setRegionMap.of(map),
-                        annotations: syncAnnotation.of(true)
-                    });
+                    console.log("Journal belongs to a different root file. Clearing journal.");
+                    fetch('/api/clear-journal', { method: 'POST' });
                 }
             }
         }
@@ -83,7 +88,7 @@ export function handleEditorChange(cmView) {
         const currentText = cmView.state.doc.toString();
         
         // 3. Save to journal
-        const patch = createJournalPatch(currentModel.fileCache);
+        const patch = createJournalPatch(currentModel.rootFile, currentModel.fileCache);
         try {
             await fetch('/api/journal', {
                 method: 'POST',

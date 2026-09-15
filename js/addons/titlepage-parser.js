@@ -24,7 +24,7 @@ SlideAddons.registerBlockPlugin('titlepage', (config, body) => {
 
     // Parse named slots like [[top]], [[title]], etc.
     const slots = {};
-    const slotRegex = /^\[\[([a-z]+)\]\]\s*\n([\s\S]*?)(?=\n\[\[|$)/gm;
+    const slotRegex = /(?:^|\n)\s*\[\[([a-z]+)\]\]\s*([\s\S]*?)(?=\n\s*\[\[[a-z]+\]\]|$)/g;
     let slotMatch;
     while ((slotMatch = slotRegex.exec(body)) !== null) {
         slots[slotMatch[1]] = slotMatch[2].trim();

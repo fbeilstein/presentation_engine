@@ -272,6 +272,12 @@ function parseAndInjectSlides(markdownContent) {
 function showSlide(index) {
     if (index < 0 || index >= slides.length) return;
 
+    if (window.parent !== window) {
+        currentSlideIndex = index;
+        window.parent.postMessage({ type: 'navigate_slide', index: index }, '*');
+        return;
+    }
+
     // Hide current
     slides[currentSlideIndex].classList.remove('active');
 

@@ -282,6 +282,18 @@ window.addEventListener('message', (e) => {
         
         
         pushCurrentSlide(true);
+    } else if (e.data.type === 'navigate_slide') {
+        const { index } = e.data;
+        if (globalSlideMapping && globalSlideMapping[index]) {
+            const slide = globalSlideMapping[index];
+            if (editorView) {
+                editorView.dispatch({
+                    selection: { anchor: slide.from },
+                    scrollIntoView: true
+                });
+                pushCurrentSlide(true);
+            }
+        }
     }
 });
 

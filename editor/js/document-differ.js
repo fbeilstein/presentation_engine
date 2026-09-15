@@ -40,11 +40,13 @@ export async function initDocument(path, cmView) {
         if (res.ok) {
             const data = await res.json();
             if (data.journal && data.journal.length > 0) {
-                console.log("Recovering from journal...");
                 const lastPatch = data.journal[data.journal.length - 1];
-                if (lastPatch.type === "fileCache" && lastPatch.cache) {
+                if (lastPatch.type === "fileCache" && lastPatch.cache && (path in lastPatch.cache)) {
+                    console.log("Recovering from journal...");
                     currentModel.fileCache = lastPatch.cache;
                     if (currentModel.onModelUpdated) currentModel.onModelUpdated();
+                } else {
+                    console.log("Journal belongs to a different file, ignoring.");
                 }
             }
         }

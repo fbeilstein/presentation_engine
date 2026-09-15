@@ -128,6 +128,21 @@ window.addEventListener('message', (e) => {
 
         const container = document.getElementById('presentation-container');
         if (!container) return;
+        
+        let globalStyles = '';
+        const styleMatches = [...markdown.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)];
+        if (styleMatches.length > 0) {
+            globalStyles = styleMatches.map(m => m[0]).join('\n');
+        }
+        let styleContainer = document.getElementById('editor-injected-styles');
+        if (!styleContainer) {
+            styleContainer = document.createElement('div');
+            styleContainer.id = 'editor-injected-styles';
+            document.head.appendChild(styleContainer);
+        }
+        if (styleContainer.innerHTML !== globalStyles) {
+            styleContainer.innerHTML = globalStyles;
+        }
 
         let slideDiv = container.querySelector('.slide');
         // In editor mode, we only want ONE slide div in the container

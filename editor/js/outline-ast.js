@@ -16,89 +16,78 @@ export function buildOutline(state) {
     if (!regionMap || !regionMap.regions) return [];
     
     const doc = state.doc.toString();
-    
     const slides = [];
     let globalIndex = 0;
     const localIndexCounters = {};
     
-    for (let i = 0; i < regionMap.regions.length; i++) {
-        const r = regionMap.regions[i];
-        
-        if (r.type === 'html-preamble' || r.type === 'html-postamble') continue;
-        
-        if (r.type === 'include-directive') {
-            continue;
-        }
-        
-        if (r.type === 'markdown-content' || r.type === 'expanded-include') {
-            if (localIndexCounters[r.file] === undefined) {
-                localIndexCounters[r.file] = 0;
-            }
-            
-            const regionText = doc.substring(r.from, r.to);
-            const lines = regionText.split('\n');
-            let currentSlideFrom = r.from;
-            let currentOffset = r.from;
-            
-            for (let j = 0; j < lines.length; j++) {
-                const line = lines[j];
-                const isBreak = line.trim() === '---';
-                
-                if (isBreak) {
-                    // Close current slide
-                    if (currentOffset > currentSlideFrom) {
-                        slides.push({
-                            globalIndex: globalIndex++,
-                            from: currentSlideFrom,
-                            to: currentOffset,
-                            file: r.file,
-                            fileStack: r.fileStack || [r.file],
-                            localIndex: localIndexCounters[r.file],
-                            title: extractTitle(doc.substring(currentSlideFrom, currentOffset)) || `Slide ${globalIndex}`,
-                            isImplicitBreak: false
-                        });
-                    }
-                    localIndexCounters[r.file]++;
-                    currentSlideFrom = currentOffset + line.length + 1; // +1 for newline
+    function getRegionForOffset(offset) {
+        let best = regionMap.regions[regionMap.regions.length - 1];
+        for (const r of regionMap.regions) {
+            if (offset >= r.from && offset < r.to) {
+                if (r.type === 'include-directive') {
+                    // The slide content actually starts in the included file.
+                    // Advance offset to the start of the next region (the child file).
+                    offset = r.to;
+                    continue;
                 }
-                
-                currentOffset += line.length + (j < lines.length - 1 ? 1 : 0);
+                return r;
             }
-            
-            // Push remaining content as a slide
+        }
+        return best;
+    }
+    
+    const lines = doc.split('\n');
+    let currentSlideFrom = 0;
+    let currentOffset = 0;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.trim() === '---') {
             if (currentOffset > currentSlideFrom) {
+                const text = doc.substring(currentSlideFrom, currentOffset);
+                const nonWsIndex = text.search(/\S/);
+                const targetOffset = nonWsIndex >= 0 ? currentSlideFrom + nonWsIndex : currentSlideFrom;
+                const r = getRegionForOffset(targetOffset) || { file: 'unknown', fileStack: ['unknown'] };
+                
+                if (localIndexCounters[r.file] === undefined) localIndexCounters[r.file] = 0;
+                
                 slides.push({
                     globalIndex: globalIndex++,
                     from: currentSlideFrom,
                     to: currentOffset,
                     file: r.file,
                     fileStack: r.fileStack || [r.file],
-                    localIndex: localIndexCounters[r.file],
-                    title: extractTitle(doc.substring(currentSlideFrom, currentOffset)) || `Slide ${globalIndex}`,
-                    isImplicitBreak: true
+                    localIndex: localIndexCounters[r.file]++,
+                    title: extractTitle(text) || `Slide ${globalIndex}`
                 });
             }
+            currentSlideFrom = currentOffset + line.length + 1; // skip --- and newline
         }
+        currentOffset += line.length + (i < lines.length - 1 ? 1 : 0);
     }
     
-    // Deduplication of empty slides
-    // The policy says: "When two !include directives are back-to-back, the adjacent breaks collapse into a single slide break — no empty slide is created between them"
-    // Wait, with the logic above, if we have:
-    // !include(a.md)
-    // !include(b.md)
-    // There are NO characters between them (just the directives which we skipped).
-    // The previous region ends right where the next region starts. 
-    // `currentOffset > currentSlideFrom` prevents pushing empty slides.
-    // If a slide is just whitespace or empty, should we remove it?
-    // Let's filter out completely empty slides or whitespace-only slides that don't have explicit --- boundaries.
-    // Actually, `currentOffset > currentSlideFrom` ensures it has text, but it could be just whitespace.
-    // The outline expects a dense array. 
+    if (currentOffset > currentSlideFrom) {
+        const text = doc.substring(currentSlideFrom, currentOffset);
+        const nonWsIndex = text.search(/\S/);
+        const targetOffset = nonWsIndex >= 0 ? currentSlideFrom + nonWsIndex : currentSlideFrom;
+        const r = getRegionForOffset(targetOffset) || { file: 'unknown', fileStack: ['unknown'] };
+        
+        if (localIndexCounters[r.file] === undefined) localIndexCounters[r.file] = 0;
+        
+        slides.push({
+            globalIndex: globalIndex++,
+            from: currentSlideFrom,
+            to: currentOffset,
+            file: r.file,
+            fileStack: r.fileStack || [r.file],
+            localIndex: localIndexCounters[r.file]++,
+            title: extractTitle(text) || `Slide ${globalIndex}`
+        });
+    }
     
-    return slides.filter(s => {
-        const text = doc.substring(s.from, s.to).trim();
-        return text.length > 0 || !s.isImplicitBreak; 
-        // Keep explicit empty slides (between ---), but remove implicit empty slides.
-    });
+    // Do NOT filter out any slides, because bridge.js does not filter them out when splitting by ---
+    // If there is an empty slide, it will exist in both outline and bridge.js
+    return slides;
 }
 
 export const outlineField = StateField.define({

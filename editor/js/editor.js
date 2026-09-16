@@ -16,6 +16,7 @@ import { structuralDetector } from './structural-detector.js';
 import { outlineField } from './outline-ast.js';
 import { outlineRendererPlugin } from './outline.js';
 import { imageToolExtension } from './tools/image-tool.js';
+import { youtubeToolExtension } from './tools/youtube-tool.js';
 
 export let editorView = null;
 export let currentFilePath = null;
@@ -187,6 +188,7 @@ export function initEditor() {
         outlineField,
         outlineRendererPlugin,
         imageToolExtension(),
+        youtubeToolExtension(),
         EditorView.updateListener.of((update) => {
             if (update.docChanged) {
                 if (currentDocumentModel) {

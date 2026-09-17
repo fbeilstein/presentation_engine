@@ -37,52 +37,62 @@ your-course/
 
 ---
 
-## 2. Starting a Slide Deck (Minimal HTML)
+## 2. Starting a Slide Deck (Two Approaches)
 
-To present your slides, you need a single HTML file (e.g., `slides.html`) at the root of your course that loads the engine. 
+There are two different workflows you can use to structure your lectures.
 
-Create `slides.html` with the following minimal template:
+### Approach A: Embedded Markdown (Self-Contained HTML)
+You can create a specific HTML file for a lecture (e.g., `01_quantum_mechanics.html`) and write your markdown directly inside it.
 
 ```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lecture Slides</title>
-    <link rel="stylesheet" href="engine/css/slides.css">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script>
-        window.MathJax = {
-            tex: {
-                inlineMath: [['$', '$'], ['\\(', '\\)']],
-                displayMath: [['$$', '$$'], ['\\[', '\\]']],
-                processEscapes: true
-            },
-            svg: { fontCache: 'global' }
-        };
-    </script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <title>Quantum Mechanics</title>
 </head>
 <body>
-    <button id="theme-toggle" onclick="toggleTheme()" title="Toggle Day/Night Theme">🌙</button>
-    <div id="presentation-container"></div>
-    <div id="controls">
-        <button id="prev-btn" onclick="prevSlide()">&#10094; Prev</button>
-        <span id="slide-counter">1 / 1</span>
-        <button id="next-btn" onclick="nextSlide()">Next &#10095;</button>
-    </div>
-    <div id="demo-overlay" class="hidden">
-        <div id="demo-header">
-            <span id="demo-title">Interactive Demo</span>
-            <button id="close-demo-btn" onclick="hideDemo()">&#10006; Return to Slides</button>
-        </div>
-        <iframe id="demo-iframe" src=""></iframe>
-    </div>
+    <!-- 1. Load the presentation engine -->
     <script type="module" src="engine/js/slides.js"></script>
+
+    <!-- 2. Write your markdown inside this block -->
+    <script type="text/markdown" id="markdown-source">
+# Quantum Mechanics
+
+Welcome to the course!
+
+---
+
+# Slide 2
+
+This is the next slide.
+    </script>
 </body>
 </html>
 ```
+*Note: The engine automatically injects all necessary boilerplate (MathJax, UI controls, presentation containers) at runtime.*
+
+### Approach B: Pure Markdown Files (Dynamic Wrapper)
+If you prefer to write your lectures in pure `.md` files, you can create a single, generic `slides.html` wrapper at the root of your course repository:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Course Slides</title>
+</head>
+<body>
+    <!-- 1. Load the presentation engine -->
+    <script type="module" src="engine/js/slides.js"></script>
+    
+    <!-- Do not include a markdown-source script block here -->
+</body>
+</html>
+```
+
+With this approach, you write your slides in separate markdown files (e.g., `lectures/01_intro.md`), and you dynamically load them via the URL parameter:
+`http://localhost:8000/slides.html?file=lectures/01_intro.md`
 
 ---
 
@@ -110,10 +120,10 @@ python -m uvicorn engine.editor.server.server:app --port 8080 --host 0.0.0.0
 
 ## 4. Making Links for GitHub Pages
 
-If you host your course repository on GitHub Pages, the presentation engine works entirely client-side. You can link directly to specific lectures by passing the root markdown or HTML file via the `?context=` URL parameter (or if your HTML file already hardcodes the include, just link to the HTML file).
+If you host your course repository on GitHub Pages, the presentation engine works entirely client-side. You can link directly to specific lectures by passing the markdown file via the `?file=` URL parameter (or if your HTML file already hardcodes the include, just link to the HTML file).
 
 **Example URL structure:**
-`https://<your-username>.github.io/<your-repo>/slides.html?context=lectures/01_intro.md`
+`https://<your-username>.github.io/<your-repo>/slides.html?file=lectures/01_intro.md`
 
 *(Note: If you create specific HTML wrappers like `01_linear_algebra.html` for different modules, simply link directly to them: `https://<your-username>.github.io/<your-repo>/01_linear_algebra.html`)*
 

@@ -35,7 +35,8 @@
                 }
                 
                 // Add base tag so relative resources load correctly
-                const baseHref = '/' + contextUrl.substring(0, contextUrl.lastIndexOf('/'));
+                const lastSlashIndex = contextUrl.lastIndexOf('/');
+                const baseHref = lastSlashIndex !== -1 ? '/' + contextUrl.substring(0, lastSlashIndex) : '';
                 const baseTag = `<base href="${baseHref}/">\n<script>window.editorBasePath = "${baseHref}";<\/script>\n`;
                 html = html.replace('<head>', '<head>\n' + baseTag);
 

@@ -297,7 +297,7 @@ document.addEventListener('dblclick', (e) => {
         e.preventDefault();
         window.parent.postMessage({
             type: 'open_external_image',
-            path: e.target.getAttribute('src')
+            path: e.target.src // Use .src to get fully resolved URL (takes <base> into account)
         }, '*');
     }
 });

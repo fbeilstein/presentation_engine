@@ -1,9 +1,9 @@
 {
   "external_apps": {
     ".svg": "inkscape",
-    ".png": "default",
-    ".jpg": "default",
-    ".jpeg": "default",
-    ".gif": "default"
+    ".png": "kolourpaint",
+    ".jpg": "kolourpaint",
+    ".jpeg": "kolourpaint",
+    ".gif": "kolourpaint"
   }
 }

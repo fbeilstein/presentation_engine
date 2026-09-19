@@ -8,6 +8,7 @@ import './addons/static-timeline.js?v=2';
 import './addons/static-diagram.js?v=2';
 import './addons/titlepage-parser.js?v=1';
 import './addons/geometry-parser.js?v=1';
+import './addons/hidden-slides.js?v=1';
 import { resolveIncludes, splitIntoSlides } from './include-parser.js';
 
 // --- Global API for HTML onclick handlers ---
@@ -252,9 +253,7 @@ function parseAndInjectSlides(markdownContent) {
         });
     });
 
-    slides = document.querySelectorAll('.slide');
-    updateCounter();
-    updateSlideScale();
+    window.reloadSlides();
 
     SlideAddons.renderAll();
 
@@ -304,6 +303,13 @@ function updateCounter(index = window.currentSlideIndex, total = slides.length) 
     }
 }
 window.updateCounter = updateCounter;
+
+export function reloadSlides() {
+    slides = document.querySelectorAll('.slide');
+    updateCounter();
+    updateSlideScale();
+}
+window.reloadSlides = reloadSlides;
 
 /**
  * Global Keyboard Listeners for Presentation Flow

@@ -104,7 +104,7 @@ Thanks to the new Unified Engine Architecture, **EVERY SINGLE ADDON** parses the
 ### 1. Media Addons
 **Syntax:** `![plugin_name](url){config}`
 *   **Images:** `![alt text](path/to/img.png){width=50% center}`
-*   **YouTube:** `![youtube](url){width=800 height=450 aspect="16/9"}`
+*   **YouTube:** `![youtube](url_or_id){width=800 height=450 aspect="16/9" start=1m30s end=100 mute autoplay nocontrols}`. Supports full URLs with `?t=` timestamps.
 *   **Google Drive:** `![gdrive](url){left=10% top=20%}`
 *   **3D Molecules:** `![3dmol](url_or_pdb_id){type=pdb style=cartoon color=element spin}`
 

@@ -22,6 +22,7 @@ SlideAddons.registerPreProcessor((md) => {
         const id = "hidden-script-" + Math.floor(Math.random() * 1000000);
         md += `\n<script id="${id}">
             (function() {
+                if (typeof window !== 'undefined' && window.isEditorPreview) return;
                 const me = document.getElementById("${id}");
                 const slide = me.closest('.slide');
                 if (slide) {
@@ -45,6 +46,8 @@ SlideAddons.registerPreProcessor((md) => {
     if (!listenerRegistered) {
         listenerRegistered = true;
         document.addEventListener('keydown', (e) => {
+            if (typeof window !== 'undefined' && window.isEditorPreview) return;
+
             // Ignore if typing in an input
             const tag = e.target.tagName.toLowerCase();
             if (tag === 'input' || tag === 'textarea') return;

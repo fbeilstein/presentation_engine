@@ -19,7 +19,7 @@ The recommended way to use this engine is to include it as a git submodule insid
 
 ```bash
 # Add to your course repository
-git submodule add https://github.com/fbeilstein/presentation_engine.git engine
+git submodule add git@github.com:fbeilstein/presentation_engine.git engine
 
 # If you are cloning a course repo that already uses the engine:
 git clone --recurse-submodules <course-repo-url>

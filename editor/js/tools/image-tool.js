@@ -26,6 +26,9 @@ export function initImageTool() {
             let pathStr = document.getElementById('paste-filename').value;
             const isDir = pathStr.endsWith('/');
             
+            const dirToSave = isDir ? pathStr : pathStr.substring(0, pathStr.lastIndexOf('/') + 1);
+            localStorage.setItem('lastImageUploadFolder', dirToSave);
+            
             let snippets = [];
             
             for (let i = 0; i < pendingFiles.length; i++) {
@@ -161,12 +164,16 @@ function showImageModal(files) {
     }
     
     if (currentFilePath) {
-        const parts = currentFilePath.split('/');
-        parts.pop();
+        let lastFolder = localStorage.getItem('lastImageUploadFolder');
+        if (!lastFolder) {
+            const parts = currentFilePath.split('/');
+            parts.pop();
+            lastFolder = parts.length > 0 ? parts.join('/') + '/assets/' : 'assets/';
+        }
         
         let defaultPath;
         if (pendingFiles.length > 1) {
-            defaultPath = parts.join('/') + '/assets/';
+            defaultPath = lastFolder;
         } else {
             // retain extension if available
             let ext = 'png';
@@ -174,7 +181,7 @@ function showImageModal(files) {
                 const fExt = files[0].name.split('.').pop();
                 if (fExt) ext = fExt;
             }
-            defaultPath = parts.join('/') + '/assets/image_' + Date.now() + '.' + ext;
+            defaultPath = lastFolder + 'image_' + Date.now() + '.' + ext;
         }
         document.getElementById('paste-filename').value = defaultPath;
     }

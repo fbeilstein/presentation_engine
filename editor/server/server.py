@@ -73,12 +73,12 @@ def get_fs_tree():
 
 @app.get("/api/exists")
 def check_exists(path: str):
-    file_path = WORKSPACE_ROOT / path
+    file_path = WORKSPACE_ROOT / path.lstrip('/')
     return {"exists": file_path.exists()}
 
 @app.get("/api/file")
 def get_file(path: str):
-    file_path = WORKSPACE_ROOT / path
+    file_path = WORKSPACE_ROOT / path.lstrip('/')
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
     try:
@@ -89,7 +89,7 @@ def get_file(path: str):
 
 @app.post("/api/file")
 def save_file(req: FileSaveRequest):
-    file_path = WORKSPACE_ROOT / req.path
+    file_path = WORKSPACE_ROOT / req.path.lstrip('/')
     try:
         # Create parent directories if they don't exist
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -101,7 +101,7 @@ def save_file(req: FileSaveRequest):
 
 @app.delete("/api/file")
 def delete_file(path: str):
-    file_path = WORKSPACE_ROOT / path
+    file_path = WORKSPACE_ROOT / path.lstrip('/')
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Path not found")
     try:
@@ -116,7 +116,7 @@ def delete_file(path: str):
 
 @app.post("/api/new")
 def new_file(req: FileNewRequest):
-    file_path = WORKSPACE_ROOT / req.path
+    file_path = WORKSPACE_ROOT / req.path.lstrip('/')
     try:
         if req.is_dir:
             file_path.mkdir(parents=True, exist_ok=True)
@@ -163,7 +163,7 @@ def clear_journal():
 
 @app.post("/api/upload")
 async def upload_file(path: str = Form(...), file: UploadFile = File(...)):
-    file_path = WORKSPACE_ROOT / path
+    file_path = WORKSPACE_ROOT / path.lstrip('/')
     try:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(file_path, "wb") as buffer:

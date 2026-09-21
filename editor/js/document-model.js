@@ -37,6 +37,36 @@ export class DocumentModel {
         }
     }
     
+    async fetchMissingIncludes() {
+        let fetchedAny = false;
+        
+        const scan = async (path, visited) => {
+            if (visited.has(path)) return;
+            visited.add(path);
+            
+            const content = this.fileCache[path];
+            if (!content) return;
+            
+            // Note: If HTML, the include is inside the markdown script block, but we can just regex the whole file
+            const lines = content.split('\n');
+            for (const line of lines) {
+                const match = line.match(/^\s*!include\((.+)\)\s*$/);
+                if (match) {
+                    const childPath = resolveIncludePath(path, match[1]);
+                    if (this.fileCache[childPath] === undefined) {
+                        await this._fetchRecursive(childPath);
+                        fetchedAny = true;
+                    }
+                    // Recursively scan the child too
+                    await scan(childPath, visited);
+                }
+            }
+        };
+        
+        await scan(this.rootFile, new Set());
+        return fetchedAny;
+    }
+    
     // Reverse-maps CM6 ChangeSet back into fileCache updates
     applyChangesToCache(regionMap, changes, doc, oldRegionMap = null) {
         // Iterate regions, extract their corresponding text from the new doc, 

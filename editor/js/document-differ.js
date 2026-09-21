@@ -85,6 +85,29 @@ export function handleEditorChange(cmView) {
     // 1. Debounce and coalesce changes for journal
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(async () => {
+        // --- NEW LOGIC: Fetch missing includes dynamically ---
+        let fetched = await currentModel.fetchMissingIncludes();
+        if (fetched) {
+            const { flatText, map } = currentModel.buildFlatText();
+            if (cmView.state.doc.toString() !== flatText) {
+                const diffChanges = computeChanges(cmView.state.doc.toString(), flatText);
+                cmView.dispatch({
+                    changes: diffChanges,
+                    effects: setRegionMap.of(map),
+                    annotations: [
+                        syncAnnotation.of(true),
+                        Transaction.addToHistory.of(false)
+                    ]
+                });
+            } else {
+                cmView.dispatch({
+                    effects: setRegionMap.of(map),
+                    annotations: syncAnnotation.of(true)
+                });
+            }
+        }
+        // ---------------------------------------------------
+        
         const currentText = cmView.state.doc.toString();
         
         // 3. Save to journal

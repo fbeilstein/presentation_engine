@@ -193,7 +193,8 @@ export function initEditor() {
             if (update.docChanged) {
                 if (currentDocumentModel) {
                     const map = update.state.field(regionMapField);
-                    currentDocumentModel.applyChangesToCache(map, update.changes, update.state.doc);
+                    const oldMap = update.startState.field(regionMapField);
+                    currentDocumentModel.applyChangesToCache(map, update.changes, update.state.doc, oldMap);
                 }
                 handleEditorChange(editorView);
                 pushCurrentSlide(false);

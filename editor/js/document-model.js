@@ -38,7 +38,7 @@ export class DocumentModel {
     }
     
     // Reverse-maps CM6 ChangeSet back into fileCache updates
-    applyChangesToCache(regionMap, changes, doc) {
+    applyChangesToCache(regionMap, changes, doc, oldRegionMap = null) {
         // Iterate regions, extract their corresponding text from the new doc, 
         // and rebuild the fileCache for each file.
         // For performance, we could only rebuild files that were modified.
@@ -49,6 +49,12 @@ export class DocumentModel {
             const matches = regionMap.regions.filter(r => r.from <= fromB && r.to >= fromB);
             for (const match of matches) {
                 modifiedFiles.add(match.file);
+            }
+            if (oldRegionMap) {
+                const oldMatches = oldRegionMap.regions.filter(r => r.from <= fromA && r.to >= fromA);
+                for (const match of oldMatches) {
+                    modifiedFiles.add(match.file);
+                }
             }
         });
         
@@ -72,8 +78,37 @@ export class DocumentModel {
             firstInstanceRegions.sort((a, b) => a.localOffset - b.localOffset);
             
             let reconstructed = "";
+            let expectedStart = firstInstanceRegions.length > 0 ? firstInstanceRegions[0].from : 0;
+            
             for (const r of firstInstanceRegions) {
+                // If there is a gap between expectedStart and r.from, and the previous region collapsed,
+                // it means text was orphaned (e.g. via undo). Absorb the gap if we are the parent!
+                // Wait, absorbing gaps might inline included files. We only absorb if it's an undo gap.
                 reconstructed += doc.sliceString(r.from, r.to);
+                
+                // Hack for Ctrl-Z on extract: if this region collapsed, and the next region has a gap,
+                // and this region was an include-directive, we absorb the gap.
+                if (r.type === 'include-directive' && r.from === r.to) {
+                    const nextRegion = firstInstanceRegions[firstInstanceRegions.indexOf(r) + 1];
+                    if (nextRegion && nextRegion.from > r.to) {
+                        reconstructed += doc.sliceString(r.to, nextRegion.from);
+                    } else if (!nextRegion) {
+                        // Find the next region in the ENTIRE document
+                        const globalIndex = regionMap.regions.indexOf(r);
+                        let nextGlobal = null;
+                        for (let j = globalIndex + 1; j < regionMap.regions.length; j++) {
+                            if (regionMap.regions[j].from > r.to) {
+                                nextGlobal = regionMap.regions[j];
+                                break;
+                            }
+                        }
+                        if (nextGlobal && nextGlobal.from > r.to) {
+                            reconstructed += doc.sliceString(r.to, nextGlobal.from);
+                        } else if (!nextGlobal && doc.length > r.to) {
+                            reconstructed += doc.sliceString(r.to, doc.length);
+                        }
+                    }
+                }
             }
             this.fileCache[file] = reconstructed;
         }

@@ -93,7 +93,7 @@ html {
 /* Image Scaling Fix */
 .slide img {
     max-width: 100%;
-    max-height: 75vh; /* 75vh leaves room for your slide titles */
+    max-height: 675px; /* 675px (75% of 900px) leaves room for your slide titles without breaking on scaled mobile viewports */
     object-fit: contain;
     display: block;
     margin: 10px auto; /* Centers the image horizontally */

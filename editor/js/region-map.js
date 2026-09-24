@@ -103,6 +103,8 @@ export function remapRegions(map, tr) {
 }
 
 export function resolveIncludePath(basePath, relativePath) {
+    basePath = basePath.replace(/\\/g, '/');
+    relativePath = relativePath.replace(/\\/g, '/');
     if (relativePath.startsWith('/')) return relativePath.substring(1);
     const baseParts = basePath.split('/');
     baseParts.pop();

@@ -57,7 +57,7 @@ def build_tree(dir_path: Path):
                 continue
             item = {
                 "name": p.name,
-                "path": str(p.relative_to(WORKSPACE_ROOT)),
+                "path": p.relative_to(WORKSPACE_ROOT).as_posix(),
                 "is_dir": p.is_dir()
             }
             if p.is_dir():

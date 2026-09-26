@@ -92,12 +92,10 @@ SlideAddons.registerBlockPlugin('nparray', (config, body) => {
         if (config.css) containerStyle += ` ${config.css}`;
         const classAttr = config.classes.length > 0 ? ` numpy-visualizer ${config.classes.join(' ')}` : ` numpy-visualizer`;
 
-        return `
-<div class="${classAttr.trim()}" style="${containerStyle.trim()}">
+        return `<div class="${classAttr.trim()}" style="${containerStyle.trim()}">
 <style>.numpy-visualizer table.np-table { border-collapse: collapse; margin: 0 auto; border-spacing: 0; } .numpy-visualizer td.np-td { border: 3px solid #666666; min-width: 30px; height: 30px; position: relative; text-align: center; color: #212121; font-size: 20px; font-weight: bolder; padding: 19px; background-clip: padding-box; } .numpy-visualizer .np-up { position: absolute; right: 2px; top: 0px; text-align: right; font-size: 14px; font-family: monospace; font-weight: bolder; color: blue; } .numpy-visualizer .np-down { position: absolute; right: 2px; bottom: 0px; text-align: right; font-size: 14px; font-family: monospace; font-weight: bolder; color: red; }</style>
 ${html}
-</div>
-`;
+</div>`;
     } catch (e) {
         return `> **Error parsing numpy array:** \`${e.message}\`\n\n\`\`\`json\n${body}\n\`\`\``;
     }

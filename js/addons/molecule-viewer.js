@@ -236,18 +236,13 @@ export class MoleculeViewerCore {
         const togglesContainer = document.getElementById(`${this.uiId}_toggles`);
         togglesContainer.innerHTML = '';
         
-        if (!molManifest.orbitals || molManifest.orbitals.length === 0) {
-            togglesContainer.innerHTML = '<i>No orbitals in bundle</i>';
-            return;
-        }
-
         // We use closure caching for orbital changes
         const renderId = ++this.currentRenderId;
         
         // Build groups
         let hasAnyValidOrbitals = false;
         
-        for (const group of molManifest.orbitals) {
+        for (const group of (molManifest.orbitals || [])) {
             const validItems = group.items.filter(item => {
                 const baseFile = item.file;
                 const posFile = baseFile.replace('.json', '_pos.json');
@@ -301,6 +296,50 @@ export class MoleculeViewerCore {
             togglesContainer.appendChild(grpDiv);
         }
         
+        if (molManifest.esp_surface) {
+            hasAnyValidOrbitals = true;
+            const grpDiv = document.createElement('div');
+            grpDiv.style.marginBottom = '12px';
+            
+            const title = document.createElement('div');
+            title.style.fontWeight = 'bold';
+            title.style.marginBottom = '4px';
+            title.style.color = 'var(--text-color)';
+            title.textContent = 'Electrostatic Potential';
+            grpDiv.appendChild(title);
+            
+            const label = document.createElement('label');
+            label.style.display = 'flex';
+            label.style.alignItems = 'center';
+            label.style.gap = '6px';
+            label.style.cursor = 'pointer';
+            label.style.marginBottom = '2px';
+            
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            
+            const item = { type: 'esp', ...molManifest.esp_surface };
+            
+            cb.onchange = () => {
+                if (cb.checked) this.activeOrbitals.add(item);
+                else this.activeOrbitals.delete(item);
+                this.renderOrbitals(loader, renderId);
+            };
+            
+            const dot = document.createElement('span');
+            dot.style.display = 'inline-block';
+            dot.style.width = '10px';
+            dot.style.height = '10px';
+            dot.style.borderRadius = '50%';
+            dot.style.background = 'linear-gradient(90deg, #ff3333, #ffffff, #3333ff)';
+            
+            label.appendChild(cb);
+            label.appendChild(dot);
+            label.appendChild(document.createTextNode(`ESP Surface (${item.esp_min} to ${item.esp_max} kcal/mol)`));
+            grpDiv.appendChild(label);
+            togglesContainer.appendChild(grpDiv);
+        }
+        
         if (!hasAnyValidOrbitals) {
             togglesContainer.innerHTML = '<i>No orbital data saved in bundle</i>';
         }
@@ -324,6 +363,40 @@ export class MoleculeViewerCore {
         };
 
         for (const item of this.activeOrbitals) {
+            if (item.type === 'esp') {
+                if (!this.orbitalCache[item.file]) {
+                    const data = await loader.getFileJSON(item.file);
+                    if (data) {
+                        this.orbitalCache[item.file] = data;
+                    }
+                }
+                const mesh = this.orbitalCache[item.file];
+                if (mesh && mesh.vertices) {
+                    const espMin = mesh.esp_min;
+                    const espMax = mesh.esp_max;
+                    const absMax = Math.max(Math.abs(espMin), Math.abs(espMax), 20); // at least ±20 kcal/mol
+                    const colors = (mesh.esp_values || []).map(v => {
+                        const t = Math.max(-1, Math.min(1, v / absMax));
+                        let r, g, b;
+                        if (t < 0) {
+                            r = 1.0; g = 1.0 + t; b = 1.0 + t;
+                        } else {
+                            r = 1.0 - t; g = 1.0 - t; b = 1.0;
+                        }
+                        return {r: r, g: g, b: b};
+                    });
+                    
+                    shapesToAdd.push({ 
+                        vertexArr: mesh.vertices, 
+                        faceArr: mesh.faces, 
+                        normalArr: mesh.normals && mesh.normals.length ? mesh.normals : undefined,
+                        color: colors.length ? colors : window['3Dmol'].CC.color('#aaaaaa'),
+                        opacity: 0.85 
+                    });
+                }
+                continue;
+            }
+
             let baseFile = item.file;
             // E.g. baseFile = molecules/ammonia_sigma_N1_H1_1.json
             let posFile = baseFile.replace('.json', '_pos.json');

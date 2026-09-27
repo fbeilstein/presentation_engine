@@ -364,19 +364,26 @@ export class MoleculeViewerCore {
 
         for (const item of this.activeOrbitals) {
             if (item.type === 'esp') {
-                if (!this.orbitalCache[item.file]) {
+                const cacheKey = `${this.currentBundleName}::${item.file}`;
+                if (!this.orbitalCache[cacheKey]) {
                     const data = await loader.getFileJSON(item.file);
                     if (data) {
-                        this.orbitalCache[item.file] = data;
+                        this.orbitalCache[cacheKey] = data;
                     }
                 }
-                const mesh = this.orbitalCache[item.file];
+                const mesh = this.orbitalCache[cacheKey];
                 if (mesh && mesh.vertices) {
                     const espMin = mesh.esp_min;
                     const espMax = mesh.esp_max;
-                    const absMax = Math.max(Math.abs(espMin), Math.abs(espMax), 20); // at least ±20 kcal/mol
+                    
                     const colors = (mesh.esp_values || []).map(v => {
-                        const t = Math.max(-1, Math.min(1, v / absMax));
+                        let t = 0;
+                        if (v < 0 && espMin < 0) {
+                            t = -Math.min(1, Math.abs(v / espMin)); // -1 at espMin
+                        } else if (v > 0 && espMax > 0) {
+                            t = Math.min(1, Math.abs(v / espMax));  // +1 at espMax
+                        }
+                        
                         let r, g, b;
                         if (t < 0) {
                             r = 1.0; g = 1.0 + t; b = 1.0 + t;
@@ -407,14 +414,15 @@ export class MoleculeViewerCore {
                 [posFile, item.color, 0.65],
                 [negFile, lighten(item.color), 0.35]
             ]) {
-                if (!this.orbitalCache[sfile]) {
+                const cacheKey = `${this.currentBundleName}::${sfile}`;
+                if (!this.orbitalCache[cacheKey]) {
                     const data = await loader.getFileJSON(sfile);
                     if (data) {
-                        this.orbitalCache[sfile] = data;
+                        this.orbitalCache[cacheKey] = data;
                     }
                 }
                 
-                const mesh = this.orbitalCache[sfile];
+                const mesh = this.orbitalCache[cacheKey];
                 if (mesh && mesh.vertices) {
                     shapesToAdd.push({ 
                         vertexArr: mesh.vertices, 

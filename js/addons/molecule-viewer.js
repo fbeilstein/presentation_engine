@@ -377,7 +377,18 @@ export class MoleculeViewerCore {
             
             label.appendChild(cb);
             label.appendChild(dot);
-            label.appendChild(document.createTextNode(`ESP Surface (${item.esp_min} to ${item.esp_max} kcal/mol)`));
+            
+            let minStr = item.esp_min;
+            let maxStr = item.esp_max;
+            if (this.config.espScale) {
+                const parts = String(this.config.espScale).split(',');
+                if (parts.length === 2) {
+                    minStr = parseFloat(parts[0]);
+                    maxStr = parseFloat(parts[1]);
+                }
+            }
+            label.appendChild(document.createTextNode(`ESP Surface (${minStr} to ${maxStr} kcal/mol)`));
+            
             grpDiv.appendChild(label);
             togglesContainer.appendChild(grpDiv);
         }
@@ -415,8 +426,16 @@ export class MoleculeViewerCore {
                 }
                 const mesh = this.orbitalCache[cacheKey];
                 if (mesh && mesh.vertices) {
-                    const espMin = mesh.esp_min;
-                    const espMax = mesh.esp_max;
+                    let espMin = mesh.esp_min;
+                    let espMax = mesh.esp_max;
+                    
+                    if (this.config.espScale) {
+                        const parts = String(this.config.espScale).split(',');
+                        if (parts.length === 2) {
+                            espMin = parseFloat(parts[0]);
+                            espMax = parseFloat(parts[1]);
+                        }
+                    }
                     
                     const colors = (mesh.esp_values || []).map(v => {
                         let t = 0;

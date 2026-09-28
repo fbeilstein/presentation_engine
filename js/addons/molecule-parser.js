@@ -45,7 +45,8 @@ SlideAddons.registerBlockPlugin('molecule', (config, body) => {
     const viewerConfig = {
         theme: config.kv.theme || 'auto',
         sidebar: config.kv.sidebar || 'visible', // 'visible', 'collapsed', 'hidden'
-        initialMolecule: config.kv.initialMolecule || null
+        initialMolecule: config.kv.initialMolecule || null,
+        espScale: config.kv.espScale || null
     };
 
     return `<div id="${containerId}"${classAttr} style="${style.trim()}"></div>

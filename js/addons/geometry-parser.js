@@ -1,4 +1,4 @@
-import { SlideAddons } from '../slides-addons.js?v=3';
+import { SlideAddons } from '../slides-addons.js?v=4';
 
 function parseDim(val) {
     if (val === undefined || val === null) return '';
@@ -140,4 +140,23 @@ SlideAddons.registerInlinePlugin('text', (args, config) => {
     const classAttr = config.classes.length > 0 ? ` class="geometry-text-overlay ${config.classes.join(' ')}"` : ` class="geometry-text-overlay"`;
 
     return `<div${classAttr} style="${style}">${text}</div>`;
+});
+
+SlideAddons.registerEditorTool('arrow', {
+    setupShape: () => {
+        return `<svg style="width:100%; height:100%; pointer-events:none;">
+            <line id="preview-shape" x1="0" y1="0" x2="0" y2="0" stroke="red" stroke-width="3" stroke-dasharray="5,5" display="none" />
+        </svg>`;
+    },
+    onMouseDown: (localX, localY, shape) => {
+        shape.setAttribute('x1', localX);
+        shape.setAttribute('y1', localY);
+        shape.setAttribute('x2', localX);
+        shape.setAttribute('y2', localY);
+        shape.style.display = 'block';
+    },
+    onMouseMove: (localX, localY, shape) => {
+        shape.setAttribute('x2', localX);
+        shape.setAttribute('y2', localY);
+    }
 });

@@ -1,4 +1,4 @@
-import { SlideAddons } from './slides-addons.js?v=3';
+import { SlideAddons } from './slides-addons.js?v=4';
 
 export function renderSingleSlide(markdownString, options = {}) {
     let md = options.addons ? options.addons.preProcess(markdownString) : markdownString;
@@ -26,8 +26,7 @@ export function updateSlideDOM(slideElement, markdownString, options = {}) {
         oldScript.parentNode.replaceChild(newScript, oldScript);
     });
     
-    if (window.MathJax) {
-        
+    if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
         window.MathJax.typesetPromise([slideElement]).catch(() => {});
     }
     

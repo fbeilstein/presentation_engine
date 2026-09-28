@@ -192,49 +192,64 @@ function toggleTool(tool, active) {
     }
     
     currentTool = tool;
+    // Target the inner container (which has position:relative) so coordinates match exactly, bypassing slide padding
+    const activeSlide = document.querySelector('.slide.active > div') || document.querySelector('.slide.active');
+    const slideRect = activeSlide ? activeSlide.getBoundingClientRect() : {left: 0, top: 0, width: window.innerWidth, height: window.innerHeight};
+    
     drawingOverlay = document.createElement('div');
     drawingOverlay.style.position = 'fixed';
-    drawingOverlay.style.top = '0';
-    drawingOverlay.style.left = '0';
-    drawingOverlay.style.width = '100vw';
-    drawingOverlay.style.height = '100vh';
+    drawingOverlay.style.top = slideRect.top + 'px';
+    drawingOverlay.style.left = slideRect.left + 'px';
+    drawingOverlay.style.width = slideRect.width + 'px';
+    drawingOverlay.style.height = slideRect.height + 'px';
     drawingOverlay.style.zIndex = '9999';
     drawingOverlay.style.cursor = 'crosshair';
     
-    // Create an SVG for previewing the line
-    drawingOverlay.innerHTML = `<svg style="width:100%; height:100%; pointer-events:none;">
-        <line id="preview-line" x1="0" y1="0" x2="0" y2="0" stroke="red" stroke-width="3" stroke-dasharray="5,5" display="none" />
-    </svg>`;
+    const toolHandlers = window.SlideAddons.editorTools && window.SlideAddons.editorTools[tool];
+    if (!toolHandlers) {
+        console.error(`[Editor Bridge] No editor tool handlers found for ${tool}`);
+        return;
+    }
+    
+    drawingOverlay.innerHTML = toolHandlers.setupShape();
     
     document.body.appendChild(drawingOverlay);
     
     drawingOverlay.addEventListener('mousedown', (e) => {
         const rect = drawingOverlay.getBoundingClientRect();
+        const localX = e.clientX - rect.left;
+        const localY = e.clientY - rect.top;
         startCoords = {
-            x: (e.clientX / rect.width) * 100,
-            y: (e.clientY / rect.height) * 100
+            x: (localX / rect.width) * 100,
+            y: (localY / rect.height) * 100,
+            localX: localX,
+            localY: localY
         };
-        const line = document.getElementById('preview-line');
-        line.setAttribute('x1', e.clientX);
-        line.setAttribute('y1', e.clientY);
-        line.setAttribute('x2', e.clientX);
-        line.setAttribute('y2', e.clientY);
-        line.style.display = 'block';
+        const shape = document.getElementById('preview-shape');
+        if (toolHandlers.onMouseDown) {
+            toolHandlers.onMouseDown(localX, localY, shape, startCoords);
+        }
     });
     
     drawingOverlay.addEventListener('mousemove', (e) => {
         if (!startCoords) return;
-        const line = document.getElementById('preview-line');
-        line.setAttribute('x2', e.clientX);
-        line.setAttribute('y2', e.clientY);
+        const rect = drawingOverlay.getBoundingClientRect();
+        const localX = e.clientX - rect.left;
+        const localY = e.clientY - rect.top;
+        const shape = document.getElementById('preview-shape');
+        if (toolHandlers.onMouseMove) {
+            toolHandlers.onMouseMove(localX, localY, shape, startCoords);
+        }
     });
     
     drawingOverlay.addEventListener('mouseup', (e) => {
         if (!startCoords) return;
         const rect = drawingOverlay.getBoundingClientRect();
+        const localX = e.clientX - rect.left;
+        const localY = e.clientY - rect.top;
         const endCoords = {
-            x: (e.clientX / rect.width) * 100,
-            y: (e.clientY / rect.height) * 100
+            x: (localX / rect.width) * 100,
+            y: (localY / rect.height) * 100
         };
         
         window.parent.postMessage({

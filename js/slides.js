@@ -1,4 +1,4 @@
-import { SlideAddons } from './slides-addons.js?v=3';
+import { SlideAddons } from './slides-addons.js?v=4';
 import './addons/numpy-parser.js?v=2';
 import './addons/matrix-parser.js?v=3';
 import './addons/youtube-parser.js?v=2';
@@ -10,6 +10,7 @@ import './addons/titlepage-parser.js?v=1';
 import './addons/geometry-parser.js?v=1';
 import './addons/hidden-slides.js?v=1';
 import './addons/molecule-parser.js?v=1';
+import './addons/react-parser.js?v=1';
 import { resolveIncludes, splitIntoSlides } from './include-parser.js';
 
 // --- Global API for HTML onclick handlers ---

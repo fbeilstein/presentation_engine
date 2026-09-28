@@ -1,10 +1,12 @@
 import { editorView } from '../editor.js';
 
-export function initGeometryTool() {
+export function initReactTool() {
     const toolbar = document.querySelector('.toolbar-actions');
+    if (!toolbar) return;
+    
     const btn = document.createElement('button');
-    btn.textContent = '↗ Draw Arrow';
-    btn.title = 'Draw an arrow over the preview';
+    btn.textContent = '▧ Draw React';
+    btn.title = 'Draw a clickable reactive area over the preview';
     
     let isActive = false;
     
@@ -15,7 +17,7 @@ export function initGeometryTool() {
         const iframe = document.getElementById('preview-iframe');
         iframe.contentWindow.postMessage({
             type: 'toggle_tool',
-            tool: 'arrow',
+            tool: 'react',
             active: isActive
         }, '*');
     });
@@ -24,12 +26,17 @@ export function initGeometryTool() {
     
     // Listen for tool completion from iframe
     window.addEventListener('message', (e) => {
-        if (e.data.type === 'tool_complete' && e.data.tool === 'arrow') {
+        if (e.data.type === 'tool_complete' && e.data.tool === 'react') {
             isActive = false;
             btn.style.backgroundColor = '';
             
             const { x1, y1, x2, y2 } = e.data.coords;
-            const snippet = `![arrow](${x1.toFixed(1)}% ${y1.toFixed(1)}% -> ${x2.toFixed(1)}% ${y2.toFixed(1)}%){color=red width=3px}\n`;
+            const x = Math.min(x1, x2);
+            const y = Math.min(y1, y2);
+            const w = Math.abs(x2 - x1);
+            const h = Math.abs(y2 - y1);
+            
+            const snippet = `\n:::react{${x.toFixed(1)} ${y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)} debug}\nel.onclick = () => window.openMoleculePopup({"Molecule": "path.bundle"});\n:::\n`;
             
             const selection = editorView.state.selection.main;
             editorView.dispatch({

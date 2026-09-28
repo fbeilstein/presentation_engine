@@ -1,6 +1,7 @@
 export const SlideAddons = {
     registry: {},
     preProcessors: [],
+    editorTools: {},
 
     /**
      * Registers a new markdown code block renderer.
@@ -9,6 +10,13 @@ export const SlideAddons = {
      */
     register(language, renderFn) {
         this.registry[language] = renderFn;
+    },
+
+    /**
+     * Registers an interactive tool for the editor preview bridge.
+     */
+    registerEditorTool(name, handlers) {
+        this.editorTools[name] = handlers;
     },
 
     /**

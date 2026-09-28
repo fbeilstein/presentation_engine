@@ -1,4 +1,4 @@
-import { SlideAddons } from '../slides-addons.js?v=3';
+import { SlideAddons } from '../slides-addons.js?v=4';
 
 // Dynamically inject the CSS for the titlepage addon
 const ENGINE_JS_DIR = new URL('.', import.meta.url);

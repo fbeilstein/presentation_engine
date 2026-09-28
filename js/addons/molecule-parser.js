@@ -63,48 +63,98 @@ setTimeout(() => {
 </script>`;
 });
 
-// Also expose the Pop-up API for programmatic access
 window.openMoleculePopup = function(bundles, config = {}) {
-    let modal = document.getElementById('molecule-modal-overlay');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'molecule-modal-overlay';
-        modal.style.cssText = `
-            position: fixed; top:0; left:0; right:0; bottom:0;
-            background: rgba(0,0,0,0.8); z-index: 10000;
-            display: none; align-items: center; justify-content: center;
-        `;
+    const winId = 'molwin_' + Math.random().toString(36).substring(2, 9);
+    
+    const win = document.createElement('div');
+    win.id = winId;
+    win.className = 'mol-window';
+    win.style.cssText = `
+        position: fixed; 
+        top: 10vh; 
+        left: 10vw;
+        width: 80vw; 
+        height: 70vh; 
+        background: #fff;
+        border-radius: 8px; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        z-index: ${10000 + document.querySelectorAll('.mol-window').length};
+        display: flex; 
+        flex-direction: column;
+        resize: both; 
+        overflow: hidden;
+    `;
+    
+    const titleBar = document.createElement('div');
+    titleBar.style.cssText = `
+        height: 30px; 
+        background: #f0f0f0; 
+        border-bottom: 1px solid #ccc;
+        cursor: grab; 
+        display: flex; 
+        justify-content: flex-end; 
+        align-items: center;
+        padding: 0 10px;
+        user-select: none;
+    `;
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '×';
+    closeBtn.style.cssText = `
+        background: none; border: none; font-size: 24px; cursor: pointer; color: #555;
+        line-height: 1; padding: 0; margin: 0;
+    `;
+    closeBtn.onclick = () => {
+        win.remove();
+    };
+    
+    titleBar.appendChild(closeBtn);
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.id = winId + '_content';
+    contentDiv.style.cssText = 'flex: 1; width: 100%; height: 100%; position: relative;';
+    
+    win.appendChild(titleBar);
+    win.appendChild(contentDiv);
+    document.body.appendChild(win);
+    
+    // Dragging logic
+    titleBar.addEventListener('mousedown', (e) => {
+        if (e.target === closeBtn) return;
+        titleBar.style.cursor = 'grabbing';
+        const rect = win.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left;
+        const offsetY = e.clientY - rect.top;
         
-        const modalBody = document.createElement('div');
-        modalBody.style.cssText = `
-            width: 80vw; height: 80vh; background: #fff;
-            border-radius: 8px; position: relative; display: flex; flex-direction: column;
-        `;
+        // Bring to front
+        let maxZ = 10000;
+        document.querySelectorAll('.mol-window').forEach(w => {
+            const z = parseInt(w.style.zIndex || 10000);
+            if (z > maxZ) maxZ = z;
+        });
+        win.style.zIndex = maxZ + 1;
         
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '×';
-        closeBtn.style.cssText = `
-            position: absolute; top: -15px; right: -15px;
-            width: 30px; height: 30px; border-radius: 50%;
-            background: #e74c3c; color: white; border: 2px solid #fff;
-            font-size: 20px; cursor: pointer; z-index: 10001;
-        `;
-        closeBtn.onclick = () => {
-            modal.style.display = 'none';
-            // Clear content to free WebGL context
-            document.getElementById('molecule-modal-content').innerHTML = '';
+        const onMouseMove = (moveEvent) => {
+            win.style.left = (moveEvent.clientX - offsetX) + 'px';
+            win.style.top = (moveEvent.clientY - offsetY) + 'px';
         };
         
-        const contentDiv = document.createElement('div');
-        contentDiv.id = 'molecule-modal-content';
-        contentDiv.style.cssText = 'flex: 1; width: 100%; height: 100%;';
+        const onMouseUp = () => {
+            titleBar.style.cursor = 'grab';
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
         
-        modalBody.appendChild(closeBtn);
-        modalBody.appendChild(contentDiv);
-        modal.appendChild(modalBody);
-        document.body.appendChild(modal);
-    }
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
     
-    modal.style.display = 'flex';
-    new window.MoleculeViewerCore('molecule-modal-content', bundles, config);
+    new window.MoleculeViewerCore(contentDiv.id, bundles, config);
+    
+    // Render MathJax (e.g. for bundle names in the sidebar)
+    setTimeout(() => {
+        if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+            window.MathJax.typesetPromise([win]).catch(() => {});
+        }
+    }, 100);
 };

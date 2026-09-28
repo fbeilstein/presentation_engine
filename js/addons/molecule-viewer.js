@@ -127,11 +127,21 @@ export class MoleculeViewerCore {
         const bundleNames = Object.keys(this.bundles);
         if (bundleNames.length > 1) {
             html += `
-                    <!-- Top Dropdown (Molecule Chooser) -->
+                    <!-- Top Molecule Chooser (Custom Dropdown) -->
                     <div style="padding: 8px; background: var(--secondary-bg); border-bottom: 1px solid var(--border-color);">
-                        <select id="${this.uiId}_chooser" style="padding:4px; font-size:14px; border-radius:4px; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color);">
-                            ${bundleNames.map(name => `<option value="${name}" ${name === this.currentBundleName ? 'selected' : ''}>${name}</option>`).join('')}
-                        </select>
+                        <div id="${this.uiId}_dropdown" style="position: relative; display: inline-block; min-width: 150px; max-width: 100%;">
+                            <div class="mol-select-trigger" style="padding: 6px 12px; font-size: 14px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-color); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span class="mol-select-value" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.currentBundleName}</span>
+                                <span style="margin-left: 10px; font-size: 10px;">▼</span>
+                            </div>
+                            <div class="mol-select-options" style="display: none; position: absolute; top: calc(100% + 2px); left: 0; min-width: 100%; background: var(--slide-bg); border: 1px solid var(--border-color); border-radius: 4px; max-height: 300px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                                ${bundleNames.map(name => `
+                                    <div class="mol-select-option" data-name="${name.replace(/"/g, '&quot;')}" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); color: var(--text-color); white-space: nowrap; background: transparent;">
+                                        ${name}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
                     </div>
             `;
         }
@@ -163,9 +173,41 @@ export class MoleculeViewerCore {
 
         // Bind events
         if (bundleNames.length > 1) {
-            const chooser = document.getElementById(`${this.uiId}_chooser`);
-            chooser.addEventListener('change', (e) => {
-                this.loadMolecule(e.target.value);
+            const dropdown = document.getElementById(`${this.uiId}_dropdown`);
+            const trigger = dropdown.querySelector('.mol-select-trigger');
+            const options = dropdown.querySelector('.mol-select-options');
+            const valueSpan = dropdown.querySelector('.mol-select-value');
+            
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isVisible = options.style.display === 'block';
+                // Close all other dropdowns in the page
+                document.querySelectorAll('.mol-select-options').forEach(el => el.style.display = 'none');
+                options.style.display = isVisible ? 'none' : 'block';
+            });
+            
+            // Close dropdown if clicked outside
+            document.addEventListener('click', (e) => {
+                if (dropdown && !dropdown.contains(e.target) && options) {
+                    options.style.display = 'none';
+                }
+            });
+            
+            dropdown.querySelectorAll('.mol-select-option').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    const name = opt.getAttribute('data-name');
+                    valueSpan.innerHTML = opt.innerHTML; // Update trigger text using HTML to support MathJax
+                    options.style.display = 'none';
+                    this.loadMolecule(name);
+                });
+                
+                // Add hover effect
+                opt.addEventListener('mouseenter', () => {
+                    opt.style.background = 'var(--secondary-bg)';
+                });
+                opt.addEventListener('mouseleave', () => {
+                    opt.style.background = 'transparent';
+                });
             });
         }
         

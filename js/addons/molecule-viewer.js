@@ -147,8 +147,21 @@ export class MoleculeViewerCore {
         }
 
         html += `
-                    <!-- 3D Viewer Canvas -->
-                    <div id="${this.canvasId}" style="flex:1; position:relative; width:100%; height:100%;"></div>
+                    <!-- Canvas and Overlays Wrapper -->
+                    <div style="flex:1; position:relative; width:100%; height:100%;">
+                        <!-- 3D Viewer Canvas -->
+                        <div id="${this.canvasId}" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
+                        
+                        <!-- Colorbar Overlay (Hidden by default) -->
+                        <div id="${this.uiId}_colorbar" style="display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 80%; max-width: 400px; flex-direction: column; z-index: 5; pointer-events: none;">
+                            <div id="${this.uiId}_colorbar_gradient" style="height: 12px; width: 100%; border-radius: 4px; border: 1px solid rgba(0,0,0,0.2); box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></div>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-top: 2px; font-weight: bold; text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 0 3px #fff;">
+                                <span id="${this.uiId}_colorbar_min"></span>
+                                <span id="${this.uiId}_colorbar_mid">0</span>
+                                <span id="${this.uiId}_colorbar_max"></span>
+                            </div>
+                        </div>
+                    </div>
                     
                     <!-- Floating Toggle Button -->
                     <div id="${this.uiId}_floating_toggle" style="display: ${floatingToggleDisplay}; position:absolute; top:10px; right:10px; background:var(--secondary-bg); border:1px solid var(--border-color); border-radius:4px; padding:6px 10px; font-size:12px; cursor:pointer; color:var(--text-color); font-weight:bold; z-index:10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
@@ -362,12 +375,54 @@ export class MoleculeViewerCore {
             
             const item = { type: 'esp', ...molManifest.esp_surface };
             
+            let minVal = item.esp_min;
+            let maxVal = item.esp_max;
+            let isCustomScale = typeof this.config.espScale === 'function';
+
+            if (isCustomScale && this.config.espScale.domain) {
+                minVal = this.config.espScale.domain[0];
+                maxVal = this.config.espScale.domain[1];
+            } else if (this.config.espScale && !isCustomScale) {
+                const parts = String(this.config.espScale).split(',');
+                if (parts.length === 2) {
+                    minVal = parseFloat(parts[0]);
+                    maxVal = parseFloat(parts[1]);
+                }
+            }
+
+            const colorbarWrap = document.getElementById(`${this.uiId}_colorbar`);
+            const colorbarGrad = document.getElementById(`${this.uiId}_colorbar_gradient`);
+            const colorbarMin = document.getElementById(`${this.uiId}_colorbar_min`);
+            const colorbarMax = document.getElementById(`${this.uiId}_colorbar_max`);
+            
+            if (isCustomScale) {
+                const stops = [];
+                for (let i = 0; i <= 10; i++) {
+                    const v = minVal + (maxVal - minVal) * (i / 10);
+                    const {r, g, b} = this.config.espScale(v, minVal, maxVal);
+                    const r8 = Math.round(r * 255);
+                    const g8 = Math.round(g * 255);
+                    const b8 = Math.round(b * 255);
+                    stops.push(`rgb(${r8},${g8},${b8}) ${i * 10}%`);
+                }
+                if (colorbarGrad) colorbarGrad.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
+            } else {
+                if (colorbarGrad) colorbarGrad.style.background = 'linear-gradient(90deg, #ff3333, #ffffff, #3333ff)';
+            }
+            if (colorbarMin) colorbarMin.textContent = minVal;
+            if (colorbarMax) colorbarMax.textContent = maxVal;
+
             cb.onchange = () => {
-                if (cb.checked) this.activeOrbitals.add(item);
-                else this.activeOrbitals.delete(item);
+                if (cb.checked) {
+                    this.activeOrbitals.add(item);
+                    if (colorbarWrap) colorbarWrap.style.display = 'flex';
+                } else {
+                    this.activeOrbitals.delete(item);
+                    if (colorbarWrap) colorbarWrap.style.display = 'none';
+                }
                 this.renderOrbitals(loader, renderId);
             };
-            
+
             const dot = document.createElement('span');
             dot.style.display = 'inline-block';
             dot.style.width = '10px';
@@ -377,17 +432,7 @@ export class MoleculeViewerCore {
             
             label.appendChild(cb);
             label.appendChild(dot);
-            
-            let minStr = item.esp_min;
-            let maxStr = item.esp_max;
-            if (this.config.espScale) {
-                const parts = String(this.config.espScale).split(',');
-                if (parts.length === 2) {
-                    minStr = parseFloat(parts[0]);
-                    maxStr = parseFloat(parts[1]);
-                }
-            }
-            label.appendChild(document.createTextNode(`ESP Surface (${minStr} to ${maxStr} kcal/mol)`));
+            label.appendChild(document.createTextNode(`ESP Surface (${minVal} to ${maxVal} kcal/mol)`));
             
             grpDiv.appendChild(label);
             togglesContainer.appendChild(grpDiv);
@@ -428,8 +473,9 @@ export class MoleculeViewerCore {
                 if (mesh && mesh.vertices) {
                     let espMin = mesh.esp_min;
                     let espMax = mesh.esp_max;
+                    let isCustomScale = typeof this.config.espScale === 'function';
                     
-                    if (this.config.espScale) {
+                    if (this.config.espScale && !isCustomScale) {
                         const parts = String(this.config.espScale).split(',');
                         if (parts.length === 2) {
                             espMin = parseFloat(parts[0]);
@@ -438,6 +484,9 @@ export class MoleculeViewerCore {
                     }
                     
                     const colors = (mesh.esp_values || []).map(v => {
+                        if (isCustomScale) {
+                            return this.config.espScale(v, espMin, espMax);
+                        }
                         let t = 0;
                         if (v < 0 && espMin < 0) {
                             t = -Math.min(1, Math.abs(v / espMin)); // -1 at espMin

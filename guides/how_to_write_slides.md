@@ -96,9 +96,15 @@ The presentation engine uses a consistent overarching syntax to embed complex in
 *   **Block Plugins:** `:::plugin_name {optional_config} \n ... \n :::`
 
 ### The Unified Configuration Block `{}`
-Thanks to the new Unified Engine Architecture, **EVERY SINGLE ADDON** parses the `{}` block in the exact same way. You can safely mix and match CSS classes, Key-Value properties, boolean flags, and Pure CSS in any `{}` block, anywhere in the engine.
+**EVERY SINGLE ADDON** parses the `{}` block in the exact same way. When the engine reads a `{}` block, it extracts information in a very specific order. You can safely mix and match four types of data in any `{}` block, anywhere in the engine:
 
-**Example of mixing everything:**
+1.  **CSS Classes:** Any word starting with a dot (e.g., `.my-class`, `.shadow-box`) is extracted and added to the element's `class="..."` attribute.
+2.  **Key-Value Properties:** Any `key=value` or `key="value"` (e.g., `width=50%`, `aspect="16/9"`) is extracted into the engine's internal configuration dictionary. *(Note: Most addons assume bare numbers are percentages, so `width=50` becomes `50%`. Append `px` if you need pixels).*
+3.  **Boolean Flags:** Certain known keywords (e.g., `center`, `right`, `absolute`) are extracted as boolean flags to trigger layout shortcuts.
+4.  **Raw / Pure CSS:** **Whatever text is left over** after the engine extracts classes, key-values, and flags is scooped up and directly injected into the element's `style="..."` attribute.
+
+
+**Example of mixing everything correctly:**
 `{ .my-class width=50% absolute center border: 1px solid red; opacity: 0.5; }`
 
 ### 1. Media Addons

@@ -113,7 +113,7 @@ pip install fastapi uvicorn
 
 # Run the editor server from the root of your course repository
 python -m uvicorn engine.editor.server.server:app --port 8080 --host 0.0.0.0
-# Open your browser to: http://localhost:8080/
+# Open your browser to: http://localhost:8080/engine/editor/index.html
 ```
 
 ---

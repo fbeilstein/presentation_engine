@@ -3,85 +3,168 @@ import { globalSlideMapping } from '../outline.js';
 import { EditorView } from '@codemirror/view';
 
 let pendingFiles = [];
+let isInitialized = false;
+let isSaving = false;
 
-export function initImageTool() {
-    // Setup listeners for the modal
-    const cancelBtn = document.getElementById('btn-paste-cancel');
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', () => {
-            document.getElementById('paste-modal').classList.add('hidden');
-            pendingFiles = [];
-        });
+function closeModal() {
+    const modal = document.getElementById('paste-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    pendingFiles = [];
+    if (editorView) {
+        editorView.focus();
+    }
+}
+
+async function handleSave() {
+    if (isSaving) return;
+    if (!pendingFiles.length) return;
+    
+    const filenameInput = document.getElementById('paste-filename');
+    if (!filenameInput) return;
+    
+    let pathStr = filenameInput.value.trim();
+    if (!pathStr) return;
+    
+    const isDir = pathStr.endsWith('/');
+    const dirToSave = isDir ? pathStr : pathStr.substring(0, pathStr.lastIndexOf('/') + 1);
+    if (dirToSave) {
+        localStorage.setItem('lastImageUploadFolder', dirToSave);
     }
     
     const saveBtn = document.getElementById('btn-paste-save');
+    const originalBtnText = saveBtn ? saveBtn.textContent : '';
     if (saveBtn) {
-        // We replace it to avoid duplicate listeners if initialized twice
-        const newSaveBtn = saveBtn.cloneNode(true);
-        saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
-        
-        newSaveBtn.addEventListener('click', async () => {
-            if (!pendingFiles.length) return;
+        saveBtn.textContent = 'Saving...';
+        saveBtn.disabled = true;
+    }
+    isSaving = true;
+    
+    let snippets = [];
+    
+    try {
+        for (let i = 0; i < pendingFiles.length; i++) {
+            const file = pendingFiles[i];
             
-            let pathStr = document.getElementById('paste-filename').value;
-            const isDir = pathStr.endsWith('/');
-            
-            const dirToSave = isDir ? pathStr : pathStr.substring(0, pathStr.lastIndexOf('/') + 1);
-            localStorage.setItem('lastImageUploadFolder', dirToSave);
-            
-            let snippets = [];
-            
-            for (let i = 0; i < pendingFiles.length; i++) {
-                const file = pendingFiles[i];
-                
-                // Determine path for this file
-                let filePath = pathStr;
-                if (isDir || pendingFiles.length > 1) {
-                    // If directory or multiple files, append timestamp/index
-                    const dir = isDir ? pathStr : pathStr.substring(0, pathStr.lastIndexOf('/') + 1);
-                    filePath = dir + 'image_' + Date.now() + '_' + i + '.' + (file.name.split('.').pop() || 'png');
-                }
-                
-                const formData = new FormData();
-                formData.append('path', filePath);
-                formData.append('file', file);
-                
-                try {
-                    const res = await fetch('/api/upload', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    if (res.ok) {
-                        // Compute relative path
-                        const fileParts = currentFilePath.split('/');
-                        fileParts.pop();
-                        const fileDir = fileParts.join('/') + '/';
-                        let relPath = filePath;
-                        if (filePath.startsWith(fileDir)) {
-                            relPath = filePath.substring(fileDir.length);
-                        } else {
-                            relPath = '/' + filePath;
-                        }
-                        
-                        snippets.push(`![Pasted Image](${relPath}){width=80% center}\n`);
-                    }
-                } catch(e) {
-                    console.error("Upload failed", e);
+            // Determine path for this file
+            let filePath = pathStr;
+            if (isDir || pendingFiles.length > 1) {
+                // If directory or multiple files, append timestamp/index
+                const dir = isDir ? pathStr : pathStr.substring(0, pathStr.lastIndexOf('/') + 1);
+                filePath = dir + 'image_' + Date.now() + '_' + i + '.' + (file.name.split('.').pop() || 'png');
+            } else if (!isDir && pendingFiles.length === 1) {
+                // If user didn't provide extension, append original or png
+                const fileExt = (file.name && file.name.includes('.')) ? file.name.split('.').pop() : 'png';
+                const lastSlash = filePath.lastIndexOf('/');
+                const lastDot = filePath.lastIndexOf('.');
+                if (lastDot === -1 || lastDot < lastSlash) {
+                    filePath += '.' + fileExt;
                 }
             }
             
-            if (snippets.length > 0) {
-                document.getElementById('paste-modal').classList.add('hidden');
-                const snippet = snippets.join('');
+            const formData = new FormData();
+            formData.append('path', filePath);
+            formData.append('file', file);
+            
+            try {
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (res.ok) {
+                    // Compute relative path
+                    let relPath = filePath;
+                    if (currentFilePath && currentFilePath.includes('/')) {
+                        const fileParts = currentFilePath.split('/');
+                        fileParts.pop();
+                        const fileDir = fileParts.join('/') + '/';
+                        if (filePath.startsWith(fileDir)) {
+                            relPath = filePath.substring(fileDir.length);
+                        } else {
+                            relPath = '/' + filePath.replace(/^\/+/, '');
+                        }
+                    } else {
+                        relPath = filePath.startsWith('/') ? filePath : '/' + filePath;
+                    }
+                    
+                    snippets.push(`![Pasted Image](${relPath}){width=80% center}\n`);
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    alert("Upload failed: " + (err.detail || res.statusText));
+                }
+            } catch(e) {
+                console.error("Upload failed", e);
+                alert("Upload failed: " + e.message);
+            }
+        }
+        
+        if (snippets.length > 0) {
+            closeModal();
+            const snippet = snippets.join('');
+            if (editorView) {
                 const cursor = editorView.state.selection.main.head;
                 editorView.dispatch({
                     changes: { from: cursor, insert: snippet }
                 });
+                editorView.focus();
             }
-            
-            pendingFiles = [];
+        }
+    } finally {
+        isSaving = false;
+        if (saveBtn) {
+            saveBtn.textContent = originalBtnText || 'Save & Insert';
+            saveBtn.disabled = false;
+        }
+    }
+}
+
+export function initImageTool() {
+    if (isInitialized) return;
+    isInitialized = true;
+
+    // Setup listeners for the modal
+    const cancelBtn = document.getElementById('btn-paste-cancel');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', closeModal);
+    }
+    
+    const saveBtn = document.getElementById('btn-paste-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', handleSave);
+    }
+
+    const filenameInput = document.getElementById('paste-filename');
+    if (filenameInput) {
+        filenameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSave();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeModal();
+            }
         });
     }
+
+    const modal = document.getElementById('paste-modal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modalEl = document.getElementById('paste-modal');
+            if (modalEl && !modalEl.classList.contains('hidden')) {
+                e.preventDefault();
+                closeModal();
+            }
+        }
+    });
     
     // Listen for messages from preview iframe
     window.addEventListener('message', async (e) => {
@@ -156,6 +239,7 @@ function showImageModal(files) {
     pendingFiles = Array.from(files);
     
     const modal = document.getElementById('paste-modal');
+    if (!modal) return;
     modal.classList.remove('hidden');
     
     const title = document.querySelector('#paste-modal h3');
@@ -163,27 +247,46 @@ function showImageModal(files) {
         title.textContent = pendingFiles.length > 1 ? `Save ${pendingFiles.length} Images` : 'Save Image';
     }
     
-    if (currentFilePath) {
-        let lastFolder = localStorage.getItem('lastImageUploadFolder');
-        if (!lastFolder) {
+    let lastFolder = localStorage.getItem('lastImageUploadFolder');
+    if (!lastFolder) {
+        if (currentFilePath) {
             const parts = currentFilePath.split('/');
             parts.pop();
             lastFolder = parts.length > 0 ? parts.join('/') + '/assets/' : 'assets/';
-        }
-        
-        let defaultPath;
-        if (pendingFiles.length > 1) {
-            defaultPath = lastFolder;
         } else {
-            // retain extension if available
-            let ext = 'png';
-            if (files.length === 1 && files[0].name) {
-                const fExt = files[0].name.split('.').pop();
-                if (fExt) ext = fExt;
-            }
-            defaultPath = lastFolder + 'image_' + Date.now() + '.' + ext;
+            lastFolder = 'assets/';
         }
-        document.getElementById('paste-filename').value = defaultPath;
+    }
+    if (!lastFolder.endsWith('/')) {
+        lastFolder += '/';
+    }
+    
+    let defaultPath;
+    if (pendingFiles.length > 1) {
+        defaultPath = lastFolder;
+    } else {
+        // retain extension if available
+        let ext = 'png';
+        if (files.length === 1 && files[0].name) {
+            const fExt = files[0].name.split('.').pop();
+            if (fExt) ext = fExt;
+        }
+        defaultPath = lastFolder + 'image_' + Date.now() + '.' + ext;
+    }
+
+    const input = document.getElementById('paste-filename');
+    if (input) {
+        input.value = defaultPath;
+        setTimeout(() => {
+            input.focus();
+            const lastSlash = defaultPath.lastIndexOf('/');
+            const lastDot = defaultPath.lastIndexOf('.');
+            if (lastSlash !== -1 && lastDot > lastSlash) {
+                input.setSelectionRange(lastSlash + 1, lastDot);
+            } else {
+                input.select();
+            }
+        }, 20);
     }
 }
 

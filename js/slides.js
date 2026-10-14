@@ -5,12 +5,13 @@ import './addons/youtube-parser.js?v=2';
 import './addons/3dmol-parser.js?v=10';
 import './addons/image-parser.js?v=2';
 import './addons/static-timeline.js?v=2';
-import './addons/static-diagram.js?v=2';
+import './addons/static-diagram.js?v=3';
 import './addons/titlepage-parser.js?v=1';
 import './addons/geometry-parser.js?v=1';
 import './addons/hidden-slides.js?v=1';
 import './addons/molecule-parser.js?v=1';
 import './addons/react-parser.js?v=1';
+import './addons/typography-parser.js?v=1';
 import { resolveIncludes, splitIntoSlides } from './include-parser.js';
 
 // --- Global API for HTML onclick handlers ---
